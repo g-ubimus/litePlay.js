@@ -1,5 +1,40 @@
 import { csound } from "../core/litePlay.js";
 
+const ANALYSIS_ORC = `
+instr 99
+  ain ins
+  krms rms ain
+  chnset krms, "listenerRms"
+  konset init 0
+  kbelow init 0
+  kthresh = 0.05
+  khold = int(30 * kr / 1000)
+  kOnsetTrig init 0
+  kOffTrig init 0
+  if krms > kthresh then
+    kbelow = 0
+    if konset == 0 then
+      konset = 1
+      kOnsetTrig = kOnsetTrig + 1
+      chnset kOnsetTrig, "listenerOnsetTrig"
+      chnset timeinsts(), "listenerOnsetTime"
+    endif
+  else
+    kbelow = kbelow + 1
+    if konset == 1 && kbelow > khold then
+      konset = 0
+      kOffTrig = kOffTrig + 1
+      chnset kOffTrig, "listenerOffsetTrig"
+      chnset timeinsts(), "listenerOffsetTime"
+    endif
+  endif
+  if konset == 1 then
+    kfreq, kamp pitch ain, 50, 60, 2000
+    chnset kfreq, "listenerPitch"
+  endif
+endin
+`;
+
 // System state
 let isListening = false;
 let analysisInstrStarted = false;
@@ -30,6 +65,8 @@ window.lastOnsetTimes = [];
 window.lastAmps = [];
 window.lastPhrase = [];
 
+let micStream = null;
+
 export async function toggleListening(audioCtx, onEventDetected) {
   if (!csound) {
     console.error("Csound engine not ready. Start litePlay first.");
@@ -39,6 +76,16 @@ export async function toggleListening(audioCtx, onEventDetected) {
 
   try {
     if (!analysisInstrStarted) {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      });
+      await csound.enableAudioInput(stream);
+      micStream = stream;
+      await csound.compileOrc(ANALYSIS_ORC);
       csound.inputMessage("i 99 0 -1");
       analysisInstrStarted = true;
     }
@@ -204,6 +251,10 @@ export function stopListening() {
   if (analysisInstrStarted) {
     csound.inputMessage("i -99 0 0.1");
     analysisInstrStarted = false;
+  }
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop());
+    micStream = null;
   }
   if (pollIntervalId) {
     clearInterval(pollIntervalId);

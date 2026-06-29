@@ -1,6 +1,6 @@
 <CsoundSynthesizer>
 <CsOptions>
--odac -d -i adc
+-odac -d 
 </CsOptions>
 <CsInstruments>
 nchnls = 2
@@ -314,41 +314,6 @@ instr 110
 	clear gaLeft, gaRight
 endin
 
-// audio analysis listener (instr 99)
-// reads from live audio input, outputs RMS/pitch/onset to control channels
-instr 99
-	ain inch 1
-	krms rms ain
-	chnset krms, "listenerRms"
-	konset init 0
-	kbelow init 0
-	kthresh = 0.05
-	khold = int(30 * kr / 1000)
-	kOnsetTrig init 0
-	kOffTrig init 0
-	if krms > kthresh then
-		kbelow = 0
-		if konset == 0 then
-			konset = 1
-			kOnsetTrig = kOnsetTrig + 1
-			chnset kOnsetTrig, "listenerOnsetTrig"
-			chnset timeinsts(), "listenerOnsetTime"
-		endif
-	else
-		kbelow = kbelow + 1
-		if konset == 1 && kbelow > khold then
-			konset = 0
-			kOffTrig = kOffTrig + 1
-			chnset kOffTrig, "listenerOffsetTrig"
-			chnset timeinsts(), "listenerOffsetTime"
-		endif
-	endif
-	if konset == 1 then
-		kfreq, kamp pitch ain, 50, 60, 2000
-		chnset kfreq, "listenerPitch"
-	endif
-endin
-
 // turn everything off when reset() is called
 instr 200
 	garev1 = 0
@@ -359,14 +324,12 @@ instr 200
 	turnoff2 10, 0, 0
 	turnoff2 12, 0, 0
 	turnoff2 1, 0, 0
-	turnoff2 99, 0, 0
 	turnoff2 100, 0, 0
 	turnoff2 110, 0, 0
 	
 	turnoff3 10
 	turnoff3 12
 	turnoff3 1
-	turnoff3 99
 	turnoff3 100
 	turnoff3 110
 	schedule(300, .1, 1)

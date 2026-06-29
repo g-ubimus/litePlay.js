@@ -17,7 +17,7 @@ import {
 } from "https://cdn.jsdelivr.net/npm/extendable-media-recorder/+esm";
 import { connect } from "https://cdn.jsdelivr.net/npm/extendable-media-recorder-wav-encoder/+esm";
 // add essentia
-import { toggleListening } from "../listener/listener.js";
+import { toggleListening } from "../listener/litePlay.listener.js";
 
 // override function to print output in console
 const consoleOutput = document.getElementById("console-output");
@@ -84,7 +84,7 @@ const stopLP = async (event) => {
 // import constants for autocompletion
 import * as litePlayLang from "./litePlay.js";
 import * as extra from "./extra.js";
-import * as listener from "../listener/listener.js";
+import * as listener from "../listener/litePlay.listener.js";
 const lpKeys = Object.keys(litePlayLang);
 const extraKeys = Object.keys(extra);
 const listenerKeys = Object.keys(listener);
