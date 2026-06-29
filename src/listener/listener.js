@@ -6,11 +6,13 @@ let essentia = null;
 let isListening = false;
 let workletNode = null;
 let micSource = null;
+let phraseCheckIntervalId = null;
 
 // Analysis State
 let isSounding = false;
 const onsetThreshold = 0.05;
 const durationThreshold = 0.02;
+const offsetHoldMs = 30; // Minimum time RMS must stay below onsetThreshold before a note-offset is confirmed
 let eventOnset = 0;
 let phraseOnset = 0;
 let framePitches = [];
@@ -43,44 +45,40 @@ export async function toggleListening(audioCtx, onEventDetected) {
       video: false,
     });
     micSource = audioCtx.createMediaStreamSource(stream);
-    workletNode = new AudioWorkletNode(audioCtx, "audio-capture-processor");
+    workletNode = new AudioWorkletNode(audioCtx, "audio-capture-processor", {
+      processorOptions: { onsetThreshold, offsetHoldMs },
+    });
 
-    // Central audio processing hub
     workletNode.port.onmessage = (event) => {
-      const vectorData = essentia.arrayToVector(event.data);
-      const rms = essentia.RMS(vectorData).rms;
-      const currentTime = audioCtx.currentTime;
+      const msg = event.data;
 
-      if (rms > onsetThreshold) {
-        handleSoundingFrame(vectorData, rms, currentTime);
-      } else {
-        handleSilentFrame(currentTime, onEventDetected);
+      switch (msg.type) {
+        case "onset":
+          triggerNoteOn(msg.time);
+          break;
+        case "offset":
+          triggerNoteOff(msg.time, onEventDetected);
+          break;
+        case "rms":
+          frameLoudness.push(msg.rms);
+          break;
+        case "pitchFrame":
+          extractPitch(msg.data);
+          break;
       }
     };
 
     micSource.connect(workletNode);
     isListening = true;
+
+    phraseCheckIntervalId = setInterval(() => {
+      if (!isSounding) checkPhraseCompletion(audioCtx.currentTime);
+    }, 100);
+
     return true;
   } catch (err) {
     console.error("Machine Listening error:", err);
     return false;
-  }
-}
-
-// is Sounding
-function handleSoundingFrame(vectorData, rms, currentTime) {
-  if (!isSounding) {
-    triggerNoteOn(currentTime);
-  }
-  extractFeatures(vectorData, rms);
-}
-
-// is Silent
-function handleSilentFrame(currentTime, onEventDetected) {
-  if (isSounding) {
-    triggerNoteOff(currentTime, onEventDetected);
-  } else {
-    checkPhraseCompletion(currentTime);
   }
 }
 
@@ -121,14 +119,14 @@ function triggerNoteOff(currentTime, onEventDetected) {
   lastNoteEndTime = currentTime;
 }
 
-function extractFeatures(vectorData, rms) {
+function extractPitch(rawData) {
+  const vectorData = essentia.arrayToVector(rawData);
   const spectrum = essentia.Spectrum(vectorData).spectrum;
   const pitchInfo = essentia.PitchYinFFT(spectrum);
 
   if (pitchInfo.pitchConfidence > 0.8) {
     framePitches.push(pitchInfo.pitch);
   }
-  frameLoudness.push(rms);
 }
 
 function updateSilenceThreshold(currentTime) {
@@ -218,6 +216,10 @@ function stopListening() {
     workletNode.disconnect();
     workletNode = null;
     micSource = null;
+  }
+  if (phraseCheckIntervalId) {
+    clearInterval(phraseCheckIntervalId);
+    phraseCheckIntervalId = null;
   }
   isListening = false;
 }
