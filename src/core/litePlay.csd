@@ -362,6 +362,82 @@ endin
 //schedule(2,0,0,"pianoc2.wav",48,0)
 //schedule(12,1,-1,48,100,0,500)
 
+instr 99
+  ain inch 1
+
+  kFastAtt chnget "listenerFastAtt"
+  kFastRel chnget "listenerFastRel"
+  kSlowAtt chnget "listenerSlowAtt"
+  kSlowRel chnget "listenerSlowRel"
+  kThresh chnget "listenerThresh"
+  kNoiseFloor chnget "listenerNoiseFloor"
+  kHoldTime chnget "listenerHoldTime"
+
+  if kFastAtt == 0 then
+    kFastAtt = 0.01
+    kFastRel = 0.05
+    kSlowAtt = 0.1
+    kSlowRel = 0.3
+    kThresh = 0.005
+    kNoiseFloor = 0.002
+    kHoldTime = 0.05
+  endif
+
+  ; Use rms with a high cutoff (100Hz) to get a fast but smooth block-rate magnitude
+  krect rms ain, 100
+
+  kfast init 0
+  kslow init 0
+
+  if (krect > kfast) then
+    kFastTime = kFastAtt
+  else
+    kFastTime = kFastRel
+  endif
+  kfast portk krect, kFastTime
+
+  if (krect > kslow) then
+    kSlowTime = kSlowAtt
+  else
+    kSlowTime = kSlowRel
+  endif
+  kslow portk krect, kSlowTime
+
+  chnset kfast, "listenerRms"
+
+  konset init 0
+  kbelow init 0
+  khold_samps = int(kHoldTime * kr)
+
+  kOnsetTrig init 0
+  kOffTrig init 0
+
+  if kfast > kslow + kThresh && konset == 0 then
+    kbelow = 0
+    konset = 1
+    kOnsetTrig = kOnsetTrig + 1
+    chnset kOnsetTrig, "listenerOnsetTrig"
+    chnset timeinsts(), "listenerOnsetTime"
+  endif
+
+  if konset == 1 then
+    if kfast < kslow + (kThresh / 2) || kfast < kNoiseFloor then
+      kbelow = kbelow + 1
+      if kbelow > khold_samps then
+        konset = 0
+        kOffTrig = kOffTrig + 1
+        chnset kOffTrig, "listenerOffsetTrig"
+        chnset timeinsts(), "listenerOffsetTime"
+      endif
+    else
+      kbelow = 0
+    endif
+
+    kfreq, kamp ptrack ain, 512
+    chnset kfreq, "listenerPitch"
+  endif
+endin
+
 </CsInstruments>
 <CsScore>
 /* program preset (memory) table */

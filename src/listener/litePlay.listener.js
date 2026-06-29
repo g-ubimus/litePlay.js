@@ -1,45 +1,9 @@
 import { csound } from "../core/litePlay.js";
 
-const ANALYSIS_ORC = `
-instr 99
-  ain ins
-  krms rms ain
-  chnset krms, "listenerRms"
-  konset init 0
-  kbelow init 0
-  kthresh = 0.05
-  khold = int(30 * kr / 1000)
-  kOnsetTrig init 0
-  kOffTrig init 0
-  if krms > kthresh then
-    kbelow = 0
-    if konset == 0 then
-      konset = 1
-      kOnsetTrig = kOnsetTrig + 1
-      chnset kOnsetTrig, "listenerOnsetTrig"
-      chnset timeinsts(), "listenerOnsetTime"
-    endif
-  else
-    kbelow = kbelow + 1
-    if konset == 1 && kbelow > khold then
-      konset = 0
-      kOffTrig = kOffTrig + 1
-      chnset kOffTrig, "listenerOffsetTrig"
-      chnset timeinsts(), "listenerOffsetTime"
-    endif
-  endif
-  if konset == 1 then
-    kfreq, kamp pitch ain, 50, 60, 2000
-    chnset kfreq, "listenerPitch"
-  endif
-endin
-`;
-
 // System state
 let isListening = false;
 let analysisInstrStarted = false;
 let isSounding = false;
-const onsetThreshold = 0.05;
 const durationThreshold = 0.02;
 let eventOnset = 0;
 let phraseOnset = 0;
@@ -48,7 +12,7 @@ let frameLoudness = [];
 let currentPhrase = [];
 let lastNoteEndTime = 0;
 let recentPauses = [];
-let silenceThreshold = 0.5;
+let silenceThreshold = 1.5;
 let pollIntervalId = null;
 let phraseCheckIntervalId = null;
 
@@ -67,11 +31,43 @@ window.lastPhrase = [];
 
 let micStream = null;
 
-export async function toggleListening(audioCtx, onEventDetected) {
+export async function toggleListening(audioCtx, arg2, arg3) {
+  let onEventDetected = null;
+  let options = {};
+
+  if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
+    options = arg2;
+    if (typeof arg3 === "function") onEventDetected = arg3;
+  } else {
+    if (typeof arg2 === "function") onEventDetected = arg2;
+    if (typeof arg3 === "object" && arg3 !== null && !Array.isArray(arg3))
+      options = arg3;
+  }
+
+  const {
+    fastAtt = 0.01,
+    fastRel = 0.05,
+    slowAtt = 0.1,
+    slowRel = 0.3,
+    thresh = 0.005,
+    noiseFloor = 0.002,
+    holdTime = 0.05,
+  } = options;
+
   if (!csound) {
     console.error("Csound engine not ready. Start litePlay first.");
     return false;
   }
+
+  // Update parameters even if already listening
+  csound.setControlChannel("listenerFastAtt", fastAtt);
+  csound.setControlChannel("listenerFastRel", fastRel);
+  csound.setControlChannel("listenerSlowAtt", slowAtt);
+  csound.setControlChannel("listenerSlowRel", slowRel);
+  csound.setControlChannel("listenerThresh", thresh);
+  csound.setControlChannel("listenerNoiseFloor", noiseFloor);
+  csound.setControlChannel("listenerHoldTime", holdTime);
+
   if (isListening) return true;
 
   try {
@@ -85,7 +81,6 @@ export async function toggleListening(audioCtx, onEventDetected) {
       });
       await csound.enableAudioInput(stream);
       micStream = stream;
-      await csound.compileOrc(ANALYSIS_ORC);
       csound.inputMessage("i 99 0 -1");
       analysisInstrStarted = true;
     }
@@ -94,7 +89,9 @@ export async function toggleListening(audioCtx, onEventDetected) {
     lastOnsetTrig = 0;
     lastOffsetTrig = 0;
 
-    pollIntervalId = setInterval(() => pollListener(onEventDetected), 10);
+    pollIntervalId = setInterval(() => {
+      pollListener(onEventDetected);
+    }, 10);
     phraseCheckIntervalId = setInterval(() => {
       if (!isSounding) checkPhraseCompletion(performance.now() / 1000);
     }, 100);
@@ -106,26 +103,28 @@ export async function toggleListening(audioCtx, onEventDetected) {
   }
 }
 
-function pollListener(onEventDetected) {
-  const onsetTrig = csound.getControlChannel("listenerOnsetTrig");
+let debugTick = 0;
+
+async function pollListener(onEventDetected) {
+  const rms = await csound.getControlChannel("listenerRms");
+
+  const onsetTrig = await csound.getControlChannel("listenerOnsetTrig");
   if (onsetTrig > lastOnsetTrig) {
     lastOnsetTrig = onsetTrig;
-    triggerNoteOn(csound.getControlChannel("listenerOnsetTime"));
+    const onsetTime = await csound.getControlChannel("listenerOnsetTime");
+    triggerNoteOn(onsetTime);
   }
 
-  const offsetTrig = csound.getControlChannel("listenerOffsetTrig");
+  const offsetTrig = await csound.getControlChannel("listenerOffsetTrig");
   if (offsetTrig > lastOffsetTrig) {
     lastOffsetTrig = offsetTrig;
-    triggerNoteOff(
-      csound.getControlChannel("listenerOffsetTime"),
-      onEventDetected,
-    );
+    const offsetTime = await csound.getControlChannel("listenerOffsetTime");
+    triggerNoteOff(offsetTime, onEventDetected);
   }
 
   if (isSounding) {
-    frameLoudness.push(csound.getControlChannel("listenerRms"));
-
-    const pitch = csound.getControlChannel("listenerPitch");
+    frameLoudness.push(rms);
+    const pitch = await csound.getControlChannel("listenerPitch");
     if (pitch > 20) framePitches.push(pitch);
   }
 }
@@ -160,6 +159,13 @@ function triggerNoteOff(currentTime, onEventDetected) {
 
     saveEventData(eventData);
     if (onEventDetected) onEventDetected(eventData);
+
+    // Log individual note to ML console immediately
+    const mlConsole = document.getElementById("ml-console");
+    if (mlConsole) {
+      mlConsole.value += `{what: ${eventData[0]}, howLoud: ${eventData[1]}, when: ${eventData[2]}, howLong: ${eventData[3]}\n`;
+      mlConsole.scrollTop = mlConsole.scrollHeight;
+    }
   }
 
   lastNoteEndTime = currentTime;
@@ -213,7 +219,7 @@ function updateSilenceThreshold(currentTime) {
 
   const avgPause =
     recentPauses.reduce((a, b) => a + b, 0) / recentPauses.length;
-  silenceThreshold = Math.max(0.5, Math.min(avgPause * 1.5, 2));
+  silenceThreshold = Math.max(1.0, Math.min(avgPause * 1.5, 3));
 }
 
 function checkPhraseCompletion(currentTime) {
@@ -236,12 +242,12 @@ function finalizePhrase() {
 
   const mlConsole = document.getElementById("ml-console");
   if (mlConsole) {
-    const logText =
-      `> Phrase grouped: ${window.lastMelody.length} events. (Threshold: ${silenceThreshold.toFixed(2)}s)\n`;
+    const logText = `Phrase: ${window.lastMelody.length} events.\n`;
     const arrayText =
-      `Melody: ${JSON.stringify(window.lastMelody)}\n` +
-      `Amps:   ${JSON.stringify(window.lastAmps)}\n` +
-      `Rhythm: ${JSON.stringify(window.lastRhythm)}\n\n`;
+      `lastMelody: ${JSON.stringify(window.lastMelody)}\n` +
+      `lastAmps:   ${JSON.stringify(window.lastAmps)}\n` +
+      `lastWhen: ${JSON.stringify(window.lastOnsetTimes)}\n\n`;
+    `lastRhythm: ${JSON.stringify(window.lastRhythm)}\n\n`;
     mlConsole.value += logText + arrayText;
     mlConsole.scrollTop = mlConsole.scrollHeight;
   }
@@ -269,5 +275,5 @@ export function stopListening() {
 }
 
 // Portuguese aliases
-export const alternarEscuta = toggleListening;
+export const ativarEscuta = toggleListening;
 export const pararEscuta = stopListening;
