@@ -130,8 +130,10 @@ export class Instrument {
           Math.min(127, Math.round(Number(what) || 60)),
         );
         if (howLoud > 0) {
-          const vol = howLoud <= 2.0 ? howLoud * 100 : howLoud;
-          const velocity = Math.max(1, Math.min(127, Math.round(vol)));
+          const velocity = Math.max(
+            1,
+            Math.min(127, Math.round(howLoud * 100)),
+          );
 
           if (howLong > 0) {
             midiRecorder._log({
@@ -888,20 +890,26 @@ export const midiRecorder = {
     }
 
     // ── Preprocess events (match Note On / Note Off) ───────────────────────
+    // activeNotes stores a queue (array) per channel_pitch key so that the
+    // same note can be triggered multiple times while already sounding.
+    // Each Note Off is matched to the earliest pending Note On (FIFO).
     const processedNotes = [];
-    const activeNotes = new Map(); // channel_pitch -> event
+    const activeNotes = new Map(); // channel_pitch -> onEvent[]
     const stopTimeSec = this._stopClockRef - this._clockRef;
 
     for (const evt of this._events) {
       if (evt.type === "note") {
         processedNotes.push(evt);
       } else if (evt.type === "on") {
-        activeNotes.set(`${evt.channel}_${evt.pitch}`, evt);
+        const key = `${evt.channel}_${evt.pitch}`;
+        if (!activeNotes.has(key)) activeNotes.set(key, []);
+        activeNotes.get(key).push(evt);
       } else if (evt.type === "off") {
         const key = `${evt.channel}_${evt.pitch}`;
-        const onEvt = activeNotes.get(key);
-        if (onEvt) {
-          activeNotes.delete(key);
+        const queue = activeNotes.get(key);
+        if (queue && queue.length > 0) {
+          const onEvt = queue.shift(); // FIFO: oldest note first
+          if (queue.length === 0) activeNotes.delete(key);
           const durSec = evt.startSec - onEvt.startSec;
           if (durSec > 0) {
             processedNotes.push({
@@ -919,18 +927,20 @@ export const midiRecorder = {
     }
 
     // Truncate any hanging notes to the stop time
-    for (const onEvt of activeNotes.values()) {
-      const durSec = stopTimeSec - onEvt.startSec;
-      if (durSec > 0) {
-        processedNotes.push({
-          pitch: onEvt.pitch,
-          velocity: onEvt.velocity,
-          channel: onEvt.channel,
-          program: onEvt.program,
-          isDrums: onEvt.isDrums,
-          startSec: onEvt.startSec,
-          durSec: durSec,
-        });
+    for (const queue of activeNotes.values()) {
+      for (const onEvt of queue) {
+        const durSec = stopTimeSec - onEvt.startSec;
+        if (durSec > 0) {
+          processedNotes.push({
+            pitch: onEvt.pitch,
+            velocity: onEvt.velocity,
+            channel: onEvt.channel,
+            program: onEvt.program,
+            isDrums: onEvt.isDrums,
+            startSec: onEvt.startSec,
+            durSec: durSec,
+          });
+        }
       }
     }
 
