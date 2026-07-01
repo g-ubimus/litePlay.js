@@ -125,43 +125,43 @@ export class Instrument {
       }
 
       if (shouldLog) {
-        const pitch = Math.max(
-          0,
-          Math.min(127, Math.round(Number(what) || 60)),
-        );
-        if (howLoud > 0) {
-          const vol = howLoud <= 2.0 ? howLoud * 100 : howLoud;
-          const velocity = Math.max(1, Math.min(127, Math.round(vol)));
+        const pitchVal = Number(what);
+        if (pitchVal >= 0) {
+          const pitch = Math.max(0.0, Math.min(127.0, pitchVal || 60.0));
+          if (howLoud > 0) {
+            const vol = howLoud <= 2.0 ? howLoud * 100 : howLoud;
+            const velocity = Math.max(1, Math.min(127, Math.round(vol)));
 
-          if (howLong > 0) {
-            midiRecorder._log({
-              type: "note",
-              pitch,
-              velocity,
-              channel: this.chn,
-              program: this.pgm,
-              isDrums: this.isDrums,
-              startSec,
-              durSec,
-            });
+            if (howLong > 0) {
+              midiRecorder._log({
+                type: "note",
+                pitch,
+                velocity,
+                channel: this.chn,
+                program: this.pgm,
+                isDrums: this.isDrums,
+                startSec,
+                durSec,
+              });
+            } else {
+              midiRecorder._log({
+                type: "on",
+                pitch,
+                velocity,
+                channel: this.chn,
+                program: this.pgm,
+                isDrums: this.isDrums,
+                startSec,
+              });
+            }
           } else {
             midiRecorder._log({
-              type: "on",
+              type: "off",
               pitch,
-              velocity,
               channel: this.chn,
-              program: this.pgm,
-              isDrums: this.isDrums,
               startSec,
             });
           }
-        } else {
-          midiRecorder._log({
-            type: "off",
-            pitch,
-            channel: this.chn,
-            startSec,
-          });
         }
       }
     }
@@ -863,8 +863,26 @@ export const midiRecorder = {
     // Build a single MIDI track chunk from an array of absolute-tick events
     // Each event: { tick, data[] }
     function buildTrack(absEvents) {
-      // Sort by tick
-      absEvents.sort((a, b) => a.tick - b.tick);
+      // Sort by tick. If ticks are equal, sort by message type priority:
+      // 1. Note Off (0x80)
+      // 2. Pitch Bend (0xe0)
+      // 3. Program Change (0xc0)
+      // 4. Note On (0x90)
+      absEvents.sort((a, b) => {
+        if (a.tick !== b.tick) {
+          return a.tick - b.tick;
+        }
+        const statusA = a.data[0] & 0xf0;
+        const statusB = b.data[0] & 0xf0;
+        function getPriority(status) {
+          if (status === 0x80) return 1;
+          if (status === 0xe0) return 2;
+          if (status === 0xc0) return 3;
+          if (status === 0x90) return 4;
+          return 5;
+        }
+        return getPriority(statusA) - getPriority(statusB);
+      });
 
       // Convert to delta-time events
       let prevTick = 0;
@@ -996,17 +1014,24 @@ export const midiRecorder = {
         data: [0xc0 | midiChn, pgm],
       });
 
+      // Sort events chronologically
+      info.events.sort((a, b) => a.startSec - b.startSec);
+
       for (const n of info.events) {
-        const onTick = toTicks(n.startSec);
+        const onTick  = toTicks(n.startSec);
         const offTick = toTicks(n.startSec + n.durSec);
+
+        // Microtones are quantised to the nearest semitone in the MIDI file.
+        // The WAV recording preserves the original microtonal audio.
+        const baseNote = Math.max(0, Math.min(127, Math.round(n.pitch)));
 
         absEvts.push({
           tick: onTick,
-          data: [0x90 | midiChn, n.pitch, n.velocity],
+          data: [0x90 | midiChn, baseNote, n.velocity],
         });
         absEvts.push({
           tick: offTick,
-          data: [0x80 | midiChn, n.pitch, 0],
+          data: [0x80 | midiChn, baseNote, 0],
         });
       }
 
