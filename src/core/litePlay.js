@@ -108,6 +108,65 @@ export class Instrument {
       this.on[what] = 0;
     }
 
+    // --- MIDI recorder hook ---
+    if (midiRecorder.recording) {
+      const now = audioClock();
+      let startSec = now + Number(secs(when)) - midiRecorder._clockRef;
+      let shouldLog = true;
+      let durSec = howLong > 0 ? Number(secs(howLong)) : 0;
+
+      if (startSec < 0) {
+        if (howLong > 0 && startSec + durSec > 0) {
+          durSec = startSec + durSec;
+          startSec = 0;
+        } else {
+          shouldLog = false;
+        }
+      }
+
+      if (shouldLog) {
+        const pitch = Math.max(
+          0,
+          Math.min(127, Math.round(Number(what) || 60)),
+        );
+        if (howLoud > 0) {
+          const vol = howLoud <= 2.0 ? howLoud * 100 : howLoud;
+          const velocity = Math.max(1, Math.min(127, Math.round(vol)));
+
+          if (howLong > 0) {
+            midiRecorder._log({
+              type: "note",
+              pitch,
+              velocity,
+              channel: this.chn,
+              program: this.pgm,
+              isDrums: this.isDrums,
+              startSec,
+              durSec,
+            });
+          } else {
+            midiRecorder._log({
+              type: "on",
+              pitch,
+              velocity,
+              channel: this.chn,
+              program: this.pgm,
+              isDrums: this.isDrums,
+              startSec,
+            });
+          }
+        } else {
+          midiRecorder._log({
+            type: "off",
+            pitch,
+            channel: this.chn,
+            startSec,
+          });
+        }
+      }
+    }
+    // --------------------------
+
     return (
       "i" +
       instr +
@@ -739,6 +798,252 @@ export async function reset() {
     console.log("No Csound instance found!");
   }
 }
+
+// ─── MIDI Recorder ────────────────────────────────────────────────────────────
+export const midiRecorder = {
+  recording: false,
+  _events: [],
+  _clockRef: 0,
+  _stopClockRef: 0,
+
+  start() {
+    this._events = [];
+    this._clockRef = audioClock();
+    this.recording = true;
+    console.log("MIDI recording started.");
+  },
+
+  stop() {
+    this.recording = false;
+    this._stopClockRef = audioClock();
+    console.log(
+      `MIDI recording stopped. Captured ${this._events.length} raw event(s).`,
+    );
+    return this._events;
+  },
+
+  _log(evt) {
+    this._events.push(evt);
+  },
+
+  // Build an SMF Type-1 binary and trigger a browser download. @param
+  // {string} [filename]  - optional override for the downloaded filename
+  buildAndDownload(filename) {
+    const bpm = globalObj.BPM;
+    const ppq = 480; // ticks per quarter note
+    const usPerBeat = Math.round(60_000_000 / bpm);
+
+    // Helper: write a variable-length quantity
+    function writeVlq(val) {
+      const bytes = [];
+      bytes.push(val & 0x7f);
+      val >>= 7;
+      while (val > 0) {
+        bytes.unshift((val & 0x7f) | 0x80);
+        val >>= 7;
+      }
+      return bytes;
+    }
+
+    // Helper: big-endian 32-bit word
+    function be32(n) {
+      return [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+    }
+
+    // Helper: big-endian 16-bit word
+    function be16(n) {
+      return [(n >> 8) & 0xff, n & 0xff];
+    }
+
+    // Convert seconds to MIDI ticks
+    function toTicks(sec) {
+      return Math.round((sec * bpm * ppq) / 60);
+    }
+
+    // Build a single MIDI track chunk from an array of absolute-tick events
+    // Each event: { tick, data[] }
+    function buildTrack(absEvents) {
+      // Sort by tick
+      absEvents.sort((a, b) => a.tick - b.tick);
+
+      // Convert to delta-time events
+      let prevTick = 0;
+      const trackBytes = [];
+      for (const ev of absEvents) {
+        const delta = ev.tick - prevTick;
+        prevTick = ev.tick;
+        trackBytes.push(...writeVlq(delta), ...ev.data);
+      }
+      // End-of-track meta event
+      trackBytes.push(0x00, 0xff, 0x2f, 0x00);
+
+      return [
+        0x4d,
+        0x54,
+        0x72,
+        0x6b, // "MTrk"
+        ...be32(trackBytes.length),
+        ...trackBytes,
+      ];
+    }
+
+    // ── Preprocess events (match Note On / Note Off) ───────────────────────
+    const processedNotes = [];
+    const activeNotes = new Map(); // channel_pitch -> event
+    const stopTimeSec = this._stopClockRef - this._clockRef;
+
+    for (const evt of this._events) {
+      if (evt.type === "note") {
+        processedNotes.push(evt);
+      } else if (evt.type === "on") {
+        activeNotes.set(`${evt.channel}_${evt.pitch}`, evt);
+      } else if (evt.type === "off") {
+        const key = `${evt.channel}_${evt.pitch}`;
+        const onEvt = activeNotes.get(key);
+        if (onEvt) {
+          activeNotes.delete(key);
+          const durSec = evt.startSec - onEvt.startSec;
+          if (durSec > 0) {
+            processedNotes.push({
+              pitch: onEvt.pitch,
+              velocity: onEvt.velocity,
+              channel: onEvt.channel,
+              program: onEvt.program,
+              isDrums: onEvt.isDrums,
+              startSec: onEvt.startSec,
+              durSec: durSec,
+            });
+          }
+        }
+      }
+    }
+
+    // Truncate any hanging notes to the stop time
+    for (const onEvt of activeNotes.values()) {
+      const durSec = stopTimeSec - onEvt.startSec;
+      if (durSec > 0) {
+        processedNotes.push({
+          pitch: onEvt.pitch,
+          velocity: onEvt.velocity,
+          channel: onEvt.channel,
+          program: onEvt.program,
+          isDrums: onEvt.isDrums,
+          startSec: onEvt.startSec,
+          durSec: durSec,
+        });
+      }
+    }
+
+    // ── Tempo track (track 0) ──────────────────────────────────────────────
+    const tempoTrackEvents = [
+      {
+        tick: 0,
+        data: [
+          0xff,
+          0x51,
+          0x03,
+          (usPerBeat >> 16) & 0xff,
+          (usPerBeat >> 8) & 0xff,
+          usPerBeat & 0xff,
+        ],
+      },
+    ];
+    const tempoTrack = buildTrack(tempoTrackEvents);
+
+    // ── Group events by channel ────────────────────────────────────────────
+    const channelMap = new Map(); // channel → { program, isDrums, events[] }
+    for (const evt of processedNotes) {
+      if (!channelMap.has(evt.channel)) {
+        channelMap.set(evt.channel, {
+          program: evt.program,
+          isDrums: evt.isDrums,
+          events: [],
+        });
+      }
+      channelMap.get(evt.channel).events.push(evt);
+    }
+
+    // ── Build one MIDI track per channel ──────────────────────────────────
+    // Standard MIDI channels are 0-15. Drums go on channel 9 (GM convention).
+    // We'll remap litePlay channels (which start at 16) to 0-15 sequentially.
+    const channelKeys = [...channelMap.keys()].sort((a, b) => a - b);
+    const channelRemap = new Map();
+    let midiChnCounter = 0;
+    for (const lpc of channelKeys) {
+      const info = channelMap.get(lpc);
+      let midiChn;
+      if (info.isDrums) {
+        midiChn = 9; // GM drums channel
+      } else {
+        // Skip channel 9 for non-drum instruments
+        if (midiChnCounter === 9) midiChnCounter++;
+        midiChn = midiChnCounter % 16;
+        midiChnCounter++;
+      }
+      channelRemap.set(lpc, midiChn);
+    }
+
+    const instrumentTracks = [];
+    for (const lpc of channelKeys) {
+      const info = channelMap.get(lpc);
+      const midiChn = channelRemap.get(lpc);
+      const absEvts = [];
+
+      // Program Change at tick 0
+      const pgm = info.isDrums ? 0 : info.program & 0x7f;
+      absEvts.push({
+        tick: 0,
+        data: [0xc0 | midiChn, pgm],
+      });
+
+      for (const n of info.events) {
+        const onTick = toTicks(n.startSec);
+        const offTick = toTicks(n.startSec + n.durSec);
+
+        absEvts.push({
+          tick: onTick,
+          data: [0x90 | midiChn, n.pitch, n.velocity],
+        });
+        absEvts.push({
+          tick: offTick,
+          data: [0x80 | midiChn, n.pitch, 0],
+        });
+      }
+
+      instrumentTracks.push(buildTrack(absEvts));
+    }
+
+    // ── Assemble SMF header ────────────────────────────────────────────────
+    const numTracks = 1 + instrumentTracks.length; // tempo + instrument tracks
+    const header = [
+      0x4d,
+      0x54,
+      0x68,
+      0x64, // "MThd"
+      ...be32(6), // header chunk length (always 6)
+      ...be16(1), // format 1 (multi-track)
+      ...be16(numTracks),
+      ...be16(ppq), // ticks per quarter note
+    ];
+
+    // Flatten everything into one Uint8Array
+    const all = [...header, ...tempoTrack, ...instrumentTracks.flat()];
+    const blob = new Blob([new Uint8Array(all)], { type: "audio/midi" });
+    const url = URL.createObjectURL(blob);
+
+    const now = new Date();
+    const dt = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getHours()}-${now.getMinutes()}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename ?? `litePlay_${dt}.mid`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    console.log(`MIDI file downloaded: ${a.download}`);
+  },
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 // sub() function to have subdivisions for the rhythms in the sequencer
 export const sub = (...notes) => ({ isSub: true, notes });
