@@ -46,6 +46,30 @@ async function copyUrlToLocal(src, dest) {
   await csound.fs.writeFile(dest, new Uint8Array(dat));
 }
 
+let sfCounter = 0;
+
+// load custom soundfont
+export async function loadSoundfont(srcOrBuffer) {
+  if (!csound) {
+    console.error("Start engine before changing soundfonts!");
+    return;
+  }
+  sfCounter++;
+  const newName = `custom_${sfCounter}.sf2`;
+  if (srcOrBuffer instanceof ArrayBuffer) {
+    await csound.fs.writeFile(newName, new Uint8Array(srcOrBuffer));
+  } else if (typeof srcOrBuffer === "string") {
+    await copyUrlToLocal(srcOrBuffer, newName);
+  } else {
+    console.error("Invalid soundfont source.");
+    return;
+  }
+  await csound.compileOrc(`
+    gisf sfload "${newName}"
+    sfpassign 0, gisf
+  `);
+}
+
 // generic midi message
 export function midi(stat, b1, b2) {
   csound.midiMessage(stat, b1, b2);
@@ -132,7 +156,7 @@ export class Instrument {
         if (howLoud > 0) {
           const velocity = Math.max(
             1,
-            Math.min(127, Math.round(howLoud * 100)),
+            Math.min(127, Math.round(howLoud * 127)),
           );
 
           if (howLong > 0) {
@@ -1605,3 +1629,5 @@ export const terçoTom = thirdTone;
 export const oitavoTom = eighthTone;
 export const dezCent = tenCent;
 export const umCent = oneCent;
+
+export const carregarSoundfont = loadSoundfont;

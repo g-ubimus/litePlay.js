@@ -214,6 +214,8 @@ const functionSignatures = {
   instrumento: "instrumento(nomeDoInstrumento)",
   escolha: "escolha(opcao1, opcao2, ...)",
   quieto: "quieto(ms)",
+  loadSoundfont: "loadSoundfont(urlOrBuffer)",
+  carregarSoundfont: "carregarSoundfont(urlOuBuffer)",
 };
 
 const signatureTooltipField = StateField.define({
@@ -517,6 +519,23 @@ document
     console.log(
       `Successfully uploaded ${fileName}.\n Use '${varName}' to access it in your code.`,
     );
+  });
+
+//change soundfont
+document
+  .getElementById("soundfont-btn")
+  .addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!window.csound) {
+      console.log("Start engine before changing soundfont...");
+      return;
+    }
+
+    const fileName = file.name;
+    const arrayBuffer = await file.arrayBuffer();
+    await window.loadSoundfont(arrayBuffer);
+    console.log(`Successfully updated soundfont to ${fileName}.`);
   });
 
 // buttons actions
