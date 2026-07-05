@@ -2,7 +2,7 @@
   "name": "liteplay",
   "version": "1.0.0",
   "description": "litePlay.js ======",
-  "main": "eslint.config.js",
+  "main": "eslint.config.mjs",
   "scripts": {
     "test": "vitest run"
   },
@@ -11,9 +11,8 @@
     "url": "git+https://github.com/g-ubimus/litePlay.js.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "author": "g-ubimus",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/g-ubimus/litePlay.js/issues"
   },
