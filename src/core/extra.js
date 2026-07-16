@@ -1,3 +1,5 @@
+import { midPitch, choose, rnd, rndInt, eventList } from "./litePlay.js";
+
 function resolveEvent(input) {
   const parseInstr = (inst) => {
     let target = inst ?? (window.piano || 1);
@@ -656,31 +658,34 @@ export function glissando(eventInput, arg2) {
   }
 
   // Return an object exposing the play() method
-  return {
-    play: function () {
-      let [startPitch, howLoud, when, howLong, onSomething] =
-        resolveEvent(eventInput);
-      const resolvedHowLong =
-        typeof howLong === "function" ? howLong() : howLong;
+  const runGlissando = function () {
+    let [startPitch, howLoud, when, howLong, onSomething] =
+      resolveEvent(eventInput);
+    const resolvedHowLong =
+      typeof howLong === "function" ? howLong() : howLong;
 
-      onSomething.play(eventInput);
-      const durationMs = resolvedHowLong * 1000;
-      const startTime = performance.now();
+    onSomething.play(eventInput);
+    const durationMs = resolvedHowLong * 1000;
+    const startTime = performance.now();
 
-      function runGlissandoLoop() {
-        const elapsedTime = performance.now() - startTime;
-        let progress = elapsedTime / durationMs;
-        if (progress > 1) progress = 1;
-        const currentPitch = startPitch + (targetPitch - startPitch) * progress;
-        const bendOffset = currentPitch - startPitch;
-        onSomething.bend(bendOffset);
+    function runGlissandoLoop() {
+      const elapsedTime = performance.now() - startTime;
+      let progress = elapsedTime / durationMs;
+      if (progress > 1) progress = 1;
+      const currentPitch = startPitch + (targetPitch - startPitch) * progress;
+      const bendOffset = currentPitch - startPitch;
+      onSomething.bend(bendOffset);
 
-        if (progress < 1) {
-          setTimeout(runGlissandoLoop, 10);
-        }
+      if (progress < 1) {
+        setTimeout(runGlissandoLoop, 10);
       }
-      runGlissandoLoop();
-    },
+    }
+    runGlissandoLoop();
+  };
+
+  return {
+    play: runGlissando,
+    toque: runGlissando,
   };
 }
 

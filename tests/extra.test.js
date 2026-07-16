@@ -1,9 +1,16 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
-import * as extra from '../src/core/extra.js';
+let extra;
 
-beforeAll(() => {
+beforeAll(async () => {
   globalThis.window = {};
+
+  // Constants required by litePlay.js
+  globalThis.quarterTone = 0.5;
+  globalThis.thirdTone = 0.3333333333333333;
+  globalThis.eighthTone = 0.25;
+  globalThis.tenCent = 0.1;
+  globalThis.oneCent = 0.01;
 
   // Math helpers used internally by extra.js functions
   globalThis.rnd = (min, max) => Math.random() * (max - min) + min;
@@ -41,6 +48,8 @@ beforeAll(() => {
     clear() { this.events = []; return this; },
     remove(ndx = -1) { if (ndx < 0) this.events.pop(); else this.events.splice(ndx, 1); return this; },
   };
+
+  extra = await import('../src/core/extra.js');
 });
 
 describe('midiToName', () => {

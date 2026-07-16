@@ -292,20 +292,24 @@ const eighthTone = 0.25;
 const tenCent = 0.1;
 const oneCent = 0.01;
 
-const lpRun = (code = null) => {
-  import(lp_URL).then((val) => {
-    lp = val;
-    lp.startEngine().then(() => {
-      if (typeof code === "function") code();
-      else console.log("litePlay.js: running\n");
-    });
-  });
+const lpRun = async (code = null) => {
+  try {
+    const val = await import(lp_URL);
+    const extra = await import(extra_URL);
+    window.lp = { ...val, ...extra };
+    await val.startEngine();
+    if (typeof code === "function") code();
+    else console.log("litePlay.js: running\n");
+  } catch (err) {
+    console.error("litePlay: Could not run engine", err);
+  }
 };
 
 const lpLoad = async () => {
   let lpModule = await import(lp_URL);
+  let extraModule = await import(extra_URL);
   await lpModule.startEngine();
-  return lpModule;
+  return { ...lpModule, ...extraModule };
 };
 
 // interface em Portugues
@@ -313,13 +317,3 @@ async function leveToque(codigo = null) {
   window.lt = await lpLoad();
   if (typeof codigo === "function") codigo();
 }
-
-// load extra module
-(async () => {
-  try {
-    const extra = await import(extra_URL);
-    Object.assign(window, extra);
-  } catch (err) {
-    console.warn("litePlay: Could not auto-load extra.js", err);
-  }
-})();
