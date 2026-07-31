@@ -65,6 +65,56 @@ const openCuica = 79;
 const muteTriangle = 80;
 const openTriangle = 81;
 
+// Nomes de percussão em Português
+const bumboAcustico = acousticBassDrum;
+const bumbo = kick;
+const bumboEletrônico = bassDrum1;
+const aro = sideStick;
+const caixaAcustica = acousticSnare;
+const palmas = handClap;
+const caixaEletrica = electricSnare;
+const caixa = snare;
+const surdoBaixo = lowFloorTom;
+const chimbalFechado = closedHiHat;
+const surdoAlto = highFloorTom;
+const chimbalPedal = pedalHiHat;
+const tomBaixo = lowTom;
+const chimbalAberto = openHiHat;
+const tomMedioBaixo = lowMidTom;
+const tomMedioAlto = hiMidTom;
+const pratoAtaque = crashCymbal;
+const pratoAtaque1 = crash;
+const tomAlto = hiTom;
+const pratoConducao1 = rideCymbal1;
+const prato = cymbal;
+const pratoChines = chineseCymbal;
+const cupulaConducao = rideBell;
+const pandeirola = tambourine;
+const pratoSplash = splashCymbal;
+const campana = cowbell;
+const pratoAtaque2 = crashCymbal2;
+const pratoConducao2 = rideCymbal2;
+const bongoAlto = hiBongo;
+const bongoBaixo = lowBongo;
+const congaAltaMuda = muteHiConga;
+const congaAltaAberta = openHiConga;
+const congaBaixa = lowConga;
+const timbalAlto = hiTimbale;
+const timbalBaixo = lowTimbale;
+const agogoAlto = hiAgogo;
+const agogoBaixo = lowAgogo;
+const cabaca = cabasa;
+const apitoLongo = longWhistle;
+const apitoCurto = shortWhistle;
+const guiroCurto = shortGuiro;
+const guiroLongo = longGuiro;
+const blocoMadeiraAlto = hiWoodBlock;
+const blocoMadeiraBaixo = lowWoodBlock;
+const cuicaMuda = muteCuica;
+const cuicaAberta = openCuica;
+const trianguloMudo = muteTriangle;
+const trianguloAberto = openTriangle;
+
 function notes(start) {
   let l = [];
   for (let i = start; i < 127; i += 12) l.push(i);
@@ -554,4 +604,52 @@ window.lpAutocomplete = {
   eighthTone,
   tenCent,
   oneCent,
+  bumboAcustico,
+  bumbo,
+  bumboEletrônico,
+  aro,
+  caixaAcustica,
+  palmas,
+  caixaEletrica,
+  caixa,
+  surdoBaixo,
+  chimbalFechado,
+  surdoAlto,
+  chimbalPedal,
+  tomBaixo,
+  chimbalAberto,
+  tomMedioBaixo,
+  tomMedioAlto,
+  pratoAtaque,
+  pratoAtaque1,
+  tomAlto,
+  pratoConducao1,
+  prato,
+  pratoChines,
+  cupulaConducao,
+  pandeirola,
+  pratoSplash,
+  campana,
+  pratoAtaque2,
+  pratoConducao2,
+  bongoAlto,
+  bongoBaixo,
+  congaAltaMuda,
+  congaAltaAberta,
+  congaBaixa,
+  timbalAlto,
+  timbalBaixo,
+  agogoAlto,
+  agogoBaixo,
+  cabaca,
+  apitoLongo,
+  apitoCurto,
+  guiroCurto,
+  guiroLongo,
+  blocoMadeiraAlto,
+  blocoMadeiraBaixo,
+  cuicaMuda,
+  cuicaAberta,
+  trianguloMudo,
+  trianguloAberto,
 };
