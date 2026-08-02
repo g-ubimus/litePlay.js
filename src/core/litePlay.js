@@ -651,7 +651,7 @@ export function dictionaryToArray(input) {
       input.howLoud ?? input.quãoForte ?? input.intensidade ?? 1,
       input.when ?? input.quando ?? 0,
       input.howLong ?? input.quãoLongo ?? input.duração ?? 1,
-      input.onSomething ?? input.noQue ?? (window.piano || 1),
+      input.onSomething ?? input.emAlgo ?? (window.piano || 1),
     ];
   }
   return input;
