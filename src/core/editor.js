@@ -87,6 +87,7 @@ const stopLP = async (event) => {
 
 // import constants for autocompletion
 import * as litePlayLang from "./litePlay.js";
+import { midiRecorder } from "./litePlay.js";
 import * as extra from "./extra.js";
 import * as listener from "../listener/listener.js";
 const lpKeys = Object.keys(litePlayLang);
@@ -450,6 +451,7 @@ async function startRecording() {
       const recBtn = document.getElementById("rec-btn");
       if (recBtn) recBtn.classList.remove("start-rec");
 
+      // ── WAV download ─────────────────────────────────────────────────
       const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
       const audioUrl = URL.createObjectURL(audioBlob);
 
@@ -461,8 +463,21 @@ async function startRecording() {
       link.download = "litePlay_" + datetime + ".wav";
       document.body.appendChild(link);
       link.click();
+      console.log("WAV file downloaded: " + link.download);
       link.remove();
       URL.revokeObjectURL(audioUrl);
+
+      // ── MIDI download ───────────────────────────────────────────────
+      midiRecorder.stop();
+      try {
+        if (midiRecorder._events.length > 0) {
+          midiRecorder.buildAndDownload(`litePlay_${datetime}.mid`);
+        } else {
+          console.log("No MIDI events captured — skipping MIDI download.");
+        }
+      } catch (err) {
+        console.error("Failed to build or download MIDI file:", err);
+      }
 
       if (connectedCsoundNode && destNode) {
         connectedCsoundNode.disconnect(destNode);
@@ -474,6 +489,8 @@ async function startRecording() {
     };
 
     mediaRecorder.start();
+    // Start MIDI recording in sync with WAV recording
+    midiRecorder.start();
     console.log("Recording started...");
   } catch (err) {
     console.error("Failed to start recording: ", err);
