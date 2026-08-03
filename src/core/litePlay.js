@@ -732,48 +732,42 @@ export function dictionaryToArray(input) {
   if (typeof isInstr === "function" && isInstr(input)) return input;
   if (typeof input === "object" && input !== null && !Array.isArray(input)) {
     return [
-      input.what ?? 60,
-      input.howLoud ?? 1,
-      input.when ?? 0,
-      input.howLong ?? 1,
-      input.onSomething ?? (window.piano || 1),
+      input.what ?? input.oque ?? input.oQue ?? 60,
+      input.howLoud ?? input.quãoForte ?? input.intensidade ?? 1,
+      input.when ?? input.quando ?? 0,
+      input.howLong ?? input.quãoLongo ?? input.duração ?? 1,
+      input.onSomething ?? input.emAlgo ?? (window.piano || 1),
     ];
   }
   return input;
 }
 
-if (typeof eventList !== "undefined") {
-  const wrapEventMethod = (originalMethod) => {
-    return function (...args) {
-      const parsedArgs = args.map((arg) => {
-        if (Array.isArray(arg)) {
-          const isListOfDicts =
-            arg.length > 0 &&
-            typeof arg[0] === "object" &&
-            arg[0] !== null &&
-            !Array.isArray(arg[0]) &&
-            !(typeof isInstr === "function" && isInstr(arg[0]));
+const wrapEventMethod = (originalMethod) => {
+  return function (...args) {
+    const parsedArgs = args.map((arg) => {
+      if (Array.isArray(arg)) {
+        const isListOfDicts =
+          arg.length > 0 &&
+          typeof arg[0] === "object" &&
+          arg[0] !== null &&
+          !Array.isArray(arg[0]) &&
+          !(typeof isInstr === "function" && isInstr(arg[0]));
 
-          if (isListOfDicts) {
-            return arg.map((item) => dictionaryToArray(item));
-          }
-          return arg;
+        if (isListOfDicts) {
+          return arg.map((item) => dictionaryToArray(item));
         }
-        return dictionaryToArray(arg);
-      });
+        return arg;
+      }
+      return dictionaryToArray(arg);
+    });
 
-      return originalMethod.apply(this, parsedArgs);
-    };
+    return originalMethod.apply(this, parsedArgs);
   };
+};
 
-  if (eventList.create) eventList.create = wrapEventMethod(eventList.create);
-  if (eventList.add) eventList.add = wrapEventMethod(eventList.add);
-  if (eventList.insert) eventList.insert = wrapEventMethod(eventList.insert);
-
-  eventList.criar = eventList.create;
-  eventList.adicionar = eventList.add;
-  eventList.inserir = eventList.insert;
-}
+eventList.create = wrapEventMethod(eventList.create);
+eventList.add = wrapEventMethod(eventList.add);
+eventList.insert = wrapEventMethod(eventList.insert);
 
 export function play(...theList) {
   if (typeof theList[0] === "function") {
@@ -1427,16 +1421,27 @@ export const silently = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Interface simples em Português
 
-// funções
+// métodos para objetos
 Instrument.prototype.toque = Instrument.prototype.play;
+Instrument.prototype.pare = Instrument.prototype.stop;
 
-export const eventos = eventList;
-eventos.toque = eventList.play;
-eventos.criar = eventList.create;
-eventos.adicionar = eventList.add;
-eventos.remover = eventList.remove;
-eventos.inserir = eventList.insert;
-eventos.limpar = eventList.clear;
+export const listaEventos = eventList;
+eventList.toque = eventList.play;
+eventList.criar = eventList.create;
+eventList.limpar = eventList.clear;
+eventList.inserir = eventList.insert;
+eventList.adicionar = eventList.add;
+eventList.remover = eventList.remove;
+
+export const sequenciador = sequencer;
+sequenciador.adicionar = sequencer.add;
+sequenciador.toque = sequencer.play;
+sequenciador.pare = sequencer.stop;
+sequenciador.limpar = sequencer.clear;
+sequenciador.remover = sequencer.remove;
+sequenciador.ativarPausa = sequencer.togglePause;
+sequenciador.ativarMudo = sequencer.toggleMute;
+sequenciador.ativarSolo = sequencer.toggleSolo;
 
 export const algum = any;
 export const toque = play;

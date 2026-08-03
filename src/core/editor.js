@@ -93,6 +93,7 @@ import * as listener from "../listener/listener.js";
 const lpKeys = Object.keys(litePlayLang);
 const extraKeys = Object.keys(extra);
 const listenerKeys = Object.keys(listener);
+const lpConstKeys = Object.keys(window.lpAutocomplete);
 
 function litePlayCompletions(context) {
   let word = context.matchBefore(/[a-zA-Z0-9_À-ÿ]+/);
@@ -103,6 +104,7 @@ function litePlayCompletions(context) {
     { keys: lpKeys, lib: litePlayLang, sourceName: "litePlay" },
     { keys: extraKeys, lib: extra, sourceName: "extra" },
     { keys: listenerKeys, lib: listener, sourceName: "listener" },
+    { keys: lpConstKeys, lib: window.lpAutocomplete, sourceName: "constants" },
   ];
 
   // 2. Flatten all keys into a single array of options

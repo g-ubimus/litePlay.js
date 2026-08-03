@@ -1,22 +1,12 @@
-// Check if the environment is local/development
-const isLocalEnv =
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1" ||
-  window.location.protocol === "file:";
-
-let baseURL = null;
-let lp_URL = null;
-let extra_URL = null;
-
-if (isLocalEnv === true) {
-  baseURL = "./";
-  lp_URL = baseURL + "litePlay.js";
-  extra_URL = baseURL + "extra.js";
+let baseURL;
+const scriptEl = document.currentScript;
+if (scriptEl && scriptEl.src) {
+  baseURL = scriptEl.src.replace(/\/[^/]*$/, "/");
 } else {
   baseURL = "https://g-ubimus.github.io/litePlay.js/src/core/";
-  lp_URL = baseURL + "litePlay.js";
-  extra_URL = baseURL + "extra.js";
 }
+const lp_URL = baseURL + "litePlay.js";
+const extra_URL = baseURL + "extra.js";
 
 // MIDI NOTE constants
 const djScratch = 29;
@@ -74,6 +64,56 @@ const muteCuica = 78;
 const openCuica = 79;
 const muteTriangle = 80;
 const openTriangle = 81;
+
+// Nomes de percussão em Português
+const bumboAcustico = acousticBassDrum;
+const bumbo = kick;
+const bumboEletrônico = bassDrum1;
+const aro = sideStick;
+const caixaAcustica = acousticSnare;
+const palmas = handClap;
+const caixaEletrica = electricSnare;
+const caixa = snare;
+const surdoBaixo = lowFloorTom;
+const chimbalFechado = closedHiHat;
+const surdoAlto = highFloorTom;
+const chimbalPedal = pedalHiHat;
+const tomBaixo = lowTom;
+const chimbalAberto = openHiHat;
+const tomMedioBaixo = lowMidTom;
+const tomMedioAlto = hiMidTom;
+const pratoAtaque = crashCymbal;
+const pratoAtaque1 = crash;
+const tomAlto = hiTom;
+const pratoConducao1 = rideCymbal1;
+const prato = cymbal;
+const pratoChines = chineseCymbal;
+const cupulaConducao = rideBell;
+const pandeirola = tambourine;
+const pratoSplash = splashCymbal;
+const campana = cowbell;
+const pratoAtaque2 = crashCymbal2;
+const pratoConducao2 = rideCymbal2;
+const bongoAlto = hiBongo;
+const bongoBaixo = lowBongo;
+const congaAltaMuda = muteHiConga;
+const congaAltaAberta = openHiConga;
+const congaBaixa = lowConga;
+const timbalAlto = hiTimbale;
+const timbalBaixo = lowTimbale;
+const agogoAlto = hiAgogo;
+const agogoBaixo = lowAgogo;
+const cabaca = cabasa;
+const apitoLongo = longWhistle;
+const apitoCurto = shortWhistle;
+const guiroCurto = shortGuiro;
+const guiroLongo = longGuiro;
+const blocoMadeiraAlto = hiWoodBlock;
+const blocoMadeiraBaixo = lowWoodBlock;
+const cuicaMuda = muteCuica;
+const cuicaAberta = openCuica;
+const trianguloMudo = muteTriangle;
+const trianguloAberto = openTriangle;
 
 function notes(start) {
   let l = [];
@@ -317,3 +357,299 @@ async function leveToque(codigo = null) {
   window.lt = await lpLoad();
   if (typeof codigo === "function") codigo();
 }
+
+window.lpAutocomplete = {
+  djScratch,
+  acousticBassDrum,
+  kick,
+  bassDrum1,
+  bassDrum,
+  sideStick,
+  acousticSnare,
+  handClap,
+  clap,
+  electricSnare,
+  snare,
+  lowFloorTom,
+  closedHiHat,
+  highFloorTom,
+  pedalHiHat,
+  lowTom,
+  tom,
+  openHiHat,
+  lowMidTom,
+  hiMidTom,
+  crashCymbal,
+  crash,
+  hiTom,
+  rideCymbal1,
+  cymbal,
+  chineseCymbal,
+  rideBell,
+  tambourine,
+  splashCymbal,
+  cowbell,
+  crashCymbal2,
+  vibraslap,
+  rideCymbal2,
+  hiBongo,
+  lowBongo,
+  muteHiConga,
+  openHiConga,
+  lowConga,
+  hiTimbale,
+  lowTimbale,
+  hiAgogo,
+  lowAgogo,
+  cabasa,
+  maracas,
+  longWhistle,
+  shortWhistle,
+  shortGuiro,
+  longGuiro,
+  claves,
+  hiWoodBlock,
+  lowWoodBlock,
+  muteCuica,
+  openCuica,
+  muteTriangle,
+  openTriangle,
+  C0,
+  C1,
+  C2,
+  C3,
+  C4,
+  C5,
+  C6,
+  C7,
+  C8,
+  Cm1,
+  Cs0,
+  Cs1,
+  Cs2,
+  Cs3,
+  Cs4,
+  Cs5,
+  Cs6,
+  Cs7,
+  Cs8,
+  Csm1,
+  Db0,
+  Db1,
+  Db2,
+  Db3,
+  Db4,
+  Db5,
+  Db6,
+  Db7,
+  Db8,
+  Dbm1,
+  D0,
+  D1,
+  D2,
+  D3,
+  D4,
+  D5,
+  D6,
+  D7,
+  D8,
+  Dm1,
+  Ds0,
+  Ds1,
+  Ds2,
+  Ds3,
+  Ds4,
+  Ds5,
+  Ds6,
+  Ds7,
+  Ds8,
+  Dsm1,
+  Eb0,
+  Eb1,
+  Eb2,
+  Eb3,
+  Eb4,
+  Eb5,
+  Eb6,
+  Eb7,
+  Eb8,
+  Ebm1,
+  E0,
+  E1,
+  E2,
+  E3,
+  E4,
+  E5,
+  E6,
+  E7,
+  E8,
+  Em1,
+  Es0,
+  Es1,
+  Es2,
+  Es3,
+  Es4,
+  Es5,
+  Es6,
+  Es7,
+  Es8,
+  Esm1,
+  F0,
+  F1,
+  F2,
+  F3,
+  F4,
+  F5,
+  F6,
+  F7,
+  F8,
+  Fm1,
+  Fs0,
+  Fs1,
+  Fs2,
+  Fs3,
+  Fs4,
+  Fs5,
+  Fs6,
+  Fs7,
+  Fs8,
+  Fsm1,
+  Gb0,
+  Gb1,
+  Gb2,
+  Gb3,
+  Gb4,
+  Gb5,
+  Gb6,
+  Gb7,
+  Gb8,
+  Gbm1,
+  G0,
+  G1,
+  G2,
+  G3,
+  G4,
+  G5,
+  G6,
+  G7,
+  G8,
+  Gm1,
+  Gs0,
+  Gs1,
+  Gs2,
+  Gs3,
+  Gs4,
+  Gs5,
+  Gs6,
+  Gs7,
+  Gsm1,
+  Ab0,
+  Ab1,
+  Ab2,
+  Ab3,
+  Ab4,
+  Ab5,
+  Ab6,
+  Ab7,
+  Abm1,
+  A0,
+  A1,
+  A2,
+  A3,
+  A4,
+  A5,
+  A6,
+  A7,
+  Am1,
+  As0,
+  As1,
+  As2,
+  As3,
+  As4,
+  As5,
+  As6,
+  As7,
+  Asm1,
+  Bb0,
+  Bb1,
+  Bb2,
+  Bb3,
+  Bb4,
+  Bb5,
+  Bb6,
+  Bb7,
+  Bbm1,
+  B0,
+  B1,
+  B2,
+  B3,
+  B4,
+  B5,
+  B6,
+  B7,
+  Bm1,
+  Bs0,
+  Bs1,
+  Bs2,
+  Bs3,
+  Bs4,
+  Bs5,
+  Bs6,
+  Bs7,
+  Bs8,
+  Bsm1,
+  O,
+  quarterTone,
+  thirdTone,
+  eighthTone,
+  tenCent,
+  oneCent,
+  bumboAcustico,
+  bumbo,
+  bumboEletrônico,
+  aro,
+  caixaAcustica,
+  palmas,
+  caixaEletrica,
+  caixa,
+  surdoBaixo,
+  chimbalFechado,
+  surdoAlto,
+  chimbalPedal,
+  tomBaixo,
+  chimbalAberto,
+  tomMedioBaixo,
+  tomMedioAlto,
+  pratoAtaque,
+  pratoAtaque1,
+  tomAlto,
+  pratoConducao1,
+  prato,
+  pratoChines,
+  cupulaConducao,
+  pandeirola,
+  pratoSplash,
+  campana,
+  pratoAtaque2,
+  pratoConducao2,
+  bongoAlto,
+  bongoBaixo,
+  congaAltaMuda,
+  congaAltaAberta,
+  congaBaixa,
+  timbalAlto,
+  timbalBaixo,
+  agogoAlto,
+  agogoBaixo,
+  cabaca,
+  apitoLongo,
+  apitoCurto,
+  guiroCurto,
+  guiroLongo,
+  blocoMadeiraAlto,
+  blocoMadeiraBaixo,
+  cuicaMuda,
+  cuicaAberta,
+  trianguloMudo,
+  trianguloAberto,
+};
