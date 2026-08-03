@@ -369,6 +369,9 @@ export const beatsToSeconds = beats;
 // set beats per minute
 export function setBpm(bpm) {
   globalObj.BPM = bpm;
+  if (midiRecorder && midiRecorder.recording) {
+    midiRecorder._logTempo(bpm);
+  }
 }
 
 // returns beats per minute
@@ -799,13 +802,16 @@ export async function reset() {
 export const midiRecorder = {
   recording: false,
   _events: [],
+  _tempoEvents: [],
   _clockRef: 0,
   _stopClockRef: 0,
 
   start() {
     this._events = [];
+    this._tempoEvents = [];
     this._clockRef = audioClock();
     this.recording = true;
+    this._logTempo(globalObj.BPM);
     console.log("MIDI recording started.");
   },
 
@@ -813,7 +819,7 @@ export const midiRecorder = {
     this.recording = false;
     this._stopClockRef = audioClock();
     console.log(
-      `MIDI recording stopped. Captured ${this._events.length} raw event(s).`,
+      `MIDI recording stopped. Captured ${this._events.length} event(s).`,
     );
     return this._events;
   },
@@ -822,12 +828,24 @@ export const midiRecorder = {
     this._events.push(evt);
   },
 
+  _logTempo(bpm) {
+    if (!this.recording) return;
+    this._tempoEvents.push({
+      bpm,
+      startSec: Math.max(0, audioClock() - this._clockRef),
+    });
+  },
+
   // Build an SMF Type-1 binary and trigger a browser download. @param
   // {string} [filename]  - optional override for the downloaded filename
   buildAndDownload(filename) {
-    const bpm = globalObj.BPM;
     const ppq = 480; // ticks per quarter note
-    const usPerBeat = Math.round(60_000_000 / bpm);
+
+    // Use recorded tempo events, or fall back to current BPM
+    const tempoMap =
+      this._tempoEvents.length > 0
+        ? this._tempoEvents
+        : [{ bpm: globalObj.BPM, startSec: 0 }];
 
     // Helper: write a variable-length quantity
     function writeVlq(val) {
@@ -851,9 +869,20 @@ export const midiRecorder = {
       return [(n >> 8) & 0xff, n & 0xff];
     }
 
-    // Convert seconds to MIDI ticks
+    // Convert seconds to MIDI ticks using the piecewise tempo map
     function toTicks(sec) {
-      return Math.round((sec * bpm * ppq) / 60);
+      let ticks = 0;
+      for (let i = 0; i < tempoMap.length; i++) {
+        const segStart = tempoMap[i].startSec;
+        const segBpm = tempoMap[i].bpm;
+        const segEnd =
+          i + 1 < tempoMap.length ? tempoMap[i + 1].startSec : Infinity;
+        if (sec <= segStart) break;
+        const dt = Math.min(sec, segEnd) - segStart;
+        ticks += (dt * segBpm * ppq) / 60;
+        if (sec <= segEnd) break;
+      }
+      return Math.round(ticks);
     }
 
     // Build a single MIDI track chunk from an array of absolute-tick events
@@ -939,19 +968,20 @@ export const midiRecorder = {
     }
 
     // ── Tempo track (track 0) ──────────────────────────────────────────────
-    const tempoTrackEvents = [
-      {
-        tick: 0,
+    const tempoTrackEvents = tempoMap.map((t) => {
+      const us = Math.round(60_000_000 / t.bpm);
+      return {
+        tick: toTicks(t.startSec),
         data: [
           0xff,
           0x51,
           0x03,
-          (usPerBeat >> 16) & 0xff,
-          (usPerBeat >> 8) & 0xff,
-          usPerBeat & 0xff,
+          (us >> 16) & 0xff,
+          (us >> 8) & 0xff,
+          us & 0xff,
         ],
-      },
-    ];
+      };
+    });
     const tempoTrack = buildTrack(tempoTrackEvents);
 
     // ── Group events by channel ────────────────────────────────────────────

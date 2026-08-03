@@ -463,15 +463,20 @@ async function startRecording() {
       link.download = "litePlay_" + datetime + ".wav";
       document.body.appendChild(link);
       link.click();
+      console.log("WAV file downloaded: " + link.download);
       link.remove();
       URL.revokeObjectURL(audioUrl);
 
       // ── MIDI download ───────────────────────────────────────────────
       midiRecorder.stop();
-      if (midiRecorder._events.length > 0) {
-        midiRecorder.buildAndDownload(`litePlay_${datetime}.mid`);
-      } else {
-        console.log("No MIDI events captured — skipping MIDI download.");
+      try {
+        if (midiRecorder._events.length > 0) {
+          midiRecorder.buildAndDownload(`litePlay_${datetime}.mid`);
+        } else {
+          console.log("No MIDI events captured — skipping MIDI download.");
+        }
+      } catch (err) {
+        console.error("Failed to build or download MIDI file:", err);
       }
 
       if (connectedCsoundNode && destNode) {

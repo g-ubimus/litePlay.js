@@ -376,3 +376,241 @@ describe('Portuguese aliases', () => {
     expect(litePlay.bateria).toBe(litePlay.drums1);
   });
 });
+
+describe('midiRecorder', () => {
+  it('starts in non-recording state with empty events', () => {
+    expect(litePlay.midiRecorder.recording).toBe(false);
+    expect(litePlay.midiRecorder._events).toEqual([]);
+  });
+
+  it('start() sets recording to true and clears events', () => {
+    litePlay.midiRecorder._events = [{ type: 'leftover' }];
+    litePlay.midiRecorder.start();
+    expect(litePlay.midiRecorder.recording).toBe(true);
+    expect(litePlay.midiRecorder._events).toEqual([]);
+    litePlay.midiRecorder.stop();
+  });
+
+  it('start() clears tempo events and logs the initial tempo', () => {
+    litePlay.setBpm(120);
+    litePlay.midiRecorder.start();
+    expect(litePlay.midiRecorder._tempoEvents.length).toBe(1);
+    expect(litePlay.midiRecorder._tempoEvents[0].bpm).toBe(120);
+    expect(litePlay.midiRecorder._tempoEvents[0].startSec).toBe(0);
+    litePlay.midiRecorder.stop();
+    litePlay.setBpm(60);
+  });
+
+  it('stop() sets recording to false and returns events', () => {
+    litePlay.midiRecorder.start();
+    litePlay.midiRecorder._log({ type: 'note', pitch: 60, velocity: 100, channel: 16, program: 0, isDrums: false, startSec: 0, durSec: 1 });
+    const events = litePlay.midiRecorder.stop();
+    expect(litePlay.midiRecorder.recording).toBe(false);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('note');
+  });
+
+  it('_log() pushes events to the internal array', () => {
+    litePlay.midiRecorder.start();
+    litePlay.midiRecorder._log({ type: 'note', pitch: 60 });
+    litePlay.midiRecorder._log({ type: 'on', pitch: 64 });
+    expect(litePlay.midiRecorder._events).toHaveLength(2);
+    litePlay.midiRecorder.stop();
+  });
+
+  it('_logTempo() records tempo changes when recording', () => {
+    litePlay.midiRecorder.start();
+    litePlay.midiRecorder._logTempo(90);
+    litePlay.midiRecorder._logTempo(120);
+    expect(litePlay.midiRecorder._tempoEvents.length).toBe(3);
+    expect(litePlay.midiRecorder._tempoEvents[1].bpm).toBe(90);
+    expect(litePlay.midiRecorder._tempoEvents[2].bpm).toBe(120);
+    litePlay.midiRecorder.stop();
+  });
+
+  it('_logTempo() does nothing when not recording', () => {
+    litePlay.midiRecorder._tempoEvents = [];
+    litePlay.midiRecorder._logTempo(90);
+    expect(litePlay.midiRecorder._tempoEvents).toHaveLength(0);
+  });
+
+  it('setBpm logs tempo event during recording', () => {
+    litePlay.midiRecorder.start();
+    const countBefore = litePlay.midiRecorder._tempoEvents.length;
+    litePlay.setBpm(140);
+    expect(litePlay.midiRecorder._tempoEvents.length).toBe(countBefore + 1);
+    expect(litePlay.midiRecorder._tempoEvents[countBefore].bpm).toBe(140);
+    litePlay.midiRecorder.stop();
+    litePlay.setBpm(60);
+  });
+
+  it('buildAndDownload produces a valid MIDI binary', () => {
+    const originalCreateElement = globalThis.window.document;
+    const clickedLinks = [];
+
+    globalThis.URL = {
+      createObjectURL: () => 'blob:mock',
+      revokeObjectURL: () => {},
+    };
+    globalThis.window.document = globalThis.document = {
+      createElement: (tag) => {
+        const link = { tag, click: () => clickedLinks.push(link), remove: () => {} };
+        return link;
+      },
+      body: { appendChild: () => {}, },
+    };
+
+    litePlay.midiRecorder._events = [];
+    litePlay.midiRecorder._tempoEvents = [{ bpm: 120, startSec: 0 }];
+    litePlay.midiRecorder._clockRef = 0;
+    litePlay.midiRecorder._stopClockRef = 2;
+    litePlay.midiRecorder.recording = false;
+
+    litePlay.midiRecorder._events.push({
+      type: 'note', pitch: 60, velocity: 100,
+      channel: 16, program: 0, isDrums: false,
+      startSec: 0, durSec: 1,
+    });
+    litePlay.midiRecorder._events.push({
+      type: 'note', pitch: 64, velocity: 80,
+      channel: 16, program: 0, isDrums: false,
+      startSec: 0.5, durSec: 0.5,
+    });
+
+    let capturedBlob = null;
+    globalThis.Blob = class {
+      constructor(parts, opts) {
+        this.parts = parts;
+        this.type = opts?.type;
+        capturedBlob = this;
+      }
+    };
+
+    litePlay.setBpm(120);
+    litePlay.midiRecorder.buildAndDownload('test.mid');
+
+    expect(capturedBlob).not.toBeNull();
+    expect(capturedBlob.type).toBe('audio/midi');
+
+    const bytes = new Uint8Array(capturedBlob.parts[0]);
+
+    expect(String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3])).toBe('MThd');
+    expect(bytes[8]).toBe(0x00);
+    expect(bytes[9]).toBe(0x01);
+
+    const ppq = (bytes[12] << 8) | bytes[13];
+    expect(ppq).toBe(480);
+
+    const numTracks = (bytes[10] << 8) | bytes[11];
+    expect(numTracks).toBeGreaterThanOrEqual(2);
+
+    expect(String.fromCharCode(bytes[14], bytes[15], bytes[16], bytes[17])).toBe('MTrk');
+
+    expect(clickedLinks).toHaveLength(1);
+    expect(clickedLinks[0].download).toBe('test.mid');
+
+    globalThis.window.document = originalCreateElement;
+    litePlay.setBpm(60);
+    delete globalThis.URL;
+    delete globalThis.Blob;
+    delete globalThis.document;
+  });
+
+  it('buildAndDownload handles on/off event pairing', () => {
+    const clickedLinks = [];
+    globalThis.URL = {
+      createObjectURL: () => 'blob:mock',
+      revokeObjectURL: () => {},
+    };
+    globalThis.window.document = globalThis.document = {
+      createElement: () => {
+        const link = { click: () => clickedLinks.push(link), remove: () => {} };
+        return link;
+      },
+      body: { appendChild: () => {} },
+    };
+
+    let capturedBlob = null;
+    globalThis.Blob = class {
+      constructor(parts, opts) {
+        this.parts = parts;
+        this.type = opts?.type;
+        capturedBlob = this;
+      }
+    };
+
+    litePlay.midiRecorder._events = [
+      { type: 'on', pitch: 72, velocity: 90, channel: 16, program: 0, isDrums: false, startSec: 0 },
+      { type: 'off', pitch: 72, channel: 16, startSec: 1.5 },
+    ];
+    litePlay.midiRecorder._tempoEvents = [{ bpm: 60, startSec: 0 }];
+    litePlay.midiRecorder._clockRef = 0;
+    litePlay.midiRecorder._stopClockRef = 2;
+
+    litePlay.midiRecorder.buildAndDownload('paired.mid');
+
+    expect(capturedBlob).not.toBeNull();
+    const bytes = new Uint8Array(capturedBlob.parts[0]);
+    expect(String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3])).toBe('MThd');
+
+    const byteStr = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    expect(byteStr).toContain('90');
+
+    globalThis.window.document = undefined;
+    delete globalThis.URL;
+    delete globalThis.Blob;
+    delete globalThis.document;
+  });
+
+  it('buildAndDownload with multiple tempo events produces multiple tempo meta-events', () => {
+    const clickedLinks = [];
+    globalThis.URL = {
+      createObjectURL: () => 'blob:mock',
+      revokeObjectURL: () => {},
+    };
+    globalThis.window.document = globalThis.document = {
+      createElement: () => {
+        const link = { click: () => clickedLinks.push(link), remove: () => {} };
+        return link;
+      },
+      body: { appendChild: () => {} },
+    };
+
+    let capturedBlob = null;
+    globalThis.Blob = class {
+      constructor(parts, opts) {
+        this.parts = parts;
+        this.type = opts?.type;
+        capturedBlob = this;
+      }
+    };
+
+    litePlay.midiRecorder._events = [
+      { type: 'note', pitch: 60, velocity: 100, channel: 16, program: 0, isDrums: false, startSec: 0, durSec: 1 },
+    ];
+    litePlay.midiRecorder._tempoEvents = [
+      { bpm: 60, startSec: 0 },
+      { bpm: 120, startSec: 1 },
+    ];
+    litePlay.midiRecorder._clockRef = 0;
+    litePlay.midiRecorder._stopClockRef = 2;
+
+    litePlay.midiRecorder.buildAndDownload('multitempo.mid');
+
+    expect(capturedBlob).not.toBeNull();
+    const bytes = Array.from(new Uint8Array(capturedBlob.parts[0]));
+
+    let tempoMetaCount = 0;
+    for (let i = 0; i < bytes.length - 2; i++) {
+      if (bytes[i] === 0xff && bytes[i + 1] === 0x51 && bytes[i + 2] === 0x03) {
+        tempoMetaCount++;
+      }
+    }
+    expect(tempoMetaCount).toBe(2);
+
+    globalThis.window.document = undefined;
+    delete globalThis.URL;
+    delete globalThis.Blob;
+    delete globalThis.document;
+  });
+});
