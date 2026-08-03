@@ -46,8 +46,6 @@ async function copyUrlToLocal(src, dest) {
   await csound.fs.writeFile(dest, new Uint8Array(dat));
 }
 
-let sfCounter = 0;
-
 // generic midi message
 export function midi(stat, b1, b2) {
   csound.midiMessage(stat, b1, b2);
