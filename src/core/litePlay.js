@@ -1420,8 +1420,7 @@ export const drums5 = new Instrument(6, true, 40);
 export const drums6 = new Instrument(7, true, 40);
 
 export function onDrums() {
-  return (new Instrument(rnd(2, 7)), true, rnd(35, 57));
-}
+  return new Instrument(rndInt(2, 8), true, choose([...membranophoneList, ...idiophoneList]));}
 
 export const silently = (ms) => new Promise((r) => setTimeout(r, ms));
 
