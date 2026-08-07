@@ -68,11 +68,11 @@ export function midiToName(midiValue) {
   return name;
 }
 
-export function transpose(notes = [], interval = 0) {
-  if (!Array.isArray(notes)) {
+export function transpose(pitches = [], interval = 0) {
+  if (!Array.isArray(pitches)) {
     throw new TypeError("transpose(): first argument must be an array.");
   }
-  return notes.map((i) => i + interval);
+  return pitches.map((i) => i + interval);
 }
 
 export function edo(divisions) {
@@ -153,23 +153,23 @@ export function randomChord(arg1, arg2, arg3) {
   if (size < 1) {
     throw new RangeError(`randomChord(): size (${size}) must be at least 1.`);
   }
-  let notes = new Set();
+  let pitches = new Set();
   let maxAttempts = range != midPitch ? 36 : 24;
 
   let attempts = 0;
   let getPitch;
 
-  while (notes.size < size && attempts < maxAttempts) {
+  while (pitches.size < size && attempts < maxAttempts) {
     if (microtonal === false) {
       getPitch = Math.round(range());
     } else {
       getPitch = range();
     }
-    notes.add(getPitch);
+    pitches.add(getPitch);
     attempts++;
   }
 
-  return Array.from(notes).sort((a, b) => a - b);
+  return Array.from(pitches).sort((a, b) => a - b);
 }
 
 export function blockChord(eventInput, arg2) {
@@ -238,6 +238,44 @@ export function arpeggio(eventInput, arg2, arg3, arg4) {
       l.add([note, howLoud, currentTime, resolvedHowLong, onSomething]);
       currentTime += resolvedHowLong;
     }
+  }
+  return l;
+}
+
+export function melody(eventInput, arg2, arg3) {
+  let pitches;
+  let rhythm;
+  let l = eventList.create();
+
+  if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
+    pitches = arg2.pitches;
+    rhythm = arg2.rhythm;
+  } else {
+    pitches = arg2;
+    rhythm = arg3;
+  }
+
+  if (pitches === undefined && rhythm === undefined) {
+    pitches = randomChord();
+    rhythm = randomRhythm();
+  } else if (pitches === undefined) {
+    pitches = randomChord(rhythm.length);
+  } else if (rhythm === undefined) {
+    rhythm = randomRhythm(pitches.length);
+  }
+
+  if (pitches.length !== rhythm.length) {
+    throw new RangeError(`melody(): size of pitches and rhythm is not equal.`);
+  }
+
+  const [note, howLoud, when, howLong, onSomething] = resolveEvent(eventInput);
+  const resolvedWhen = typeof when === "function" ? when() : when;
+  const resolvedHowLong = typeof howLong === "function" ? howLong() : howLong;
+  let currentWhen = resolvedWhen;
+
+  for (let i = 0, len = pitches.length; i < len; i++) {
+    l.add([pitches[i], howLoud, currentWhen, rhythm[i], onSomething]);
+    currentWhen = currentWhen + rhythm[i];
   }
   return l;
 }
@@ -519,6 +557,31 @@ export function ostinato(eventInput, arg2, arg3) {
     }
   }
   return l;
+}
+
+export function randomRhythm(arg1, arg2) {
+  let size = 4;
+  let range = midDur;
+
+  if (typeof arg1 === "object" && arg1 !== null && !Array.isArray(arg1)) {
+    size = arg1.size ?? size;
+    range = arg1.range ?? range;
+  } else {
+    if (arg1 !== undefined) size = arg1;
+    if (arg2 !== undefined) range = arg2;
+  }
+  if (size < 1) {
+    throw new RangeError(`randomRhythm(): size (${size}) must be at least 1.`);
+  }
+  let durations = [];
+  let getDuration;
+
+  while (durations.length < size) {
+    getDuration = range();
+    durations.push(getDuration);
+  }
+
+  return durations;
 }
 
 export function euclidean(eventInput, arg2, arg3, arg4, arg5) {
