@@ -348,8 +348,16 @@ export class Sampler extends Instrument {
   }
 }
 
+// resolve an instrument or sample object into an Instrument
+function toInstr(instr) {
+  if (instr instanceof Instrument) return instr;
+  if (instr && typeof instr === "object" && instr.instr instanceof Instrument)
+    return instr.instr;
+  return null;
+}
+
 function isInstr(instr) {
-  return instr instanceof Instrument;
+  return toInstr(instr) !== null;
 }
 
 // return seconds from beats
@@ -524,7 +532,7 @@ export const sequencer = {
                 let instr_ = evt[4];
                 if (typeof instr_ === "function") theInstr = instr_();
                 else theInstr = instr_;
-                theInstr = isInstr(theInstr) ? theInstr : this.instr;
+                theInstr = toInstr(theInstr) || this.instr;
                 dur = dur > 0 ? dur : theInstr.isDrums ? 0 : this.bbs;
               }
               if (sched >= 0 && pp >= 0 && this.on)
@@ -558,7 +566,7 @@ export const sequencer = {
                   let instr_ = el[4];
                   if (typeof instr_ === "function") theInstr = instr_();
                   else theInstr = instr_;
-                  theInstr = isInstr(theInstr) ? theInstr : this.instr;
+                  theInstr = toInstr(theInstr) || this.instr;
                   dur = dur > 0 ? dur : theInstr.isDrums ? 0 : this.bbs;
                 }
 
@@ -651,7 +659,7 @@ export const eventList = {
         let instr_ = evt.length > 4 ? evt[4] : defInstr;
         if (typeof instr_ === "function") instr = instr_();
         else instr = instr_;
-        instr = isInstr(instr) ? instr : defInstr;
+        instr = toInstr(instr) || defInstr;
 
         let dur_ = evt.length > 3 ? evt[3] : instr.howLong;
         if (typeof dur_ === "function") dur = dur_();
