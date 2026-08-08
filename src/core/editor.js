@@ -25,11 +25,13 @@ import { toggleListening } from "../listener/listener.js";
 
 // override function to print output in console
 const consoleOutput = document.getElementById("console-output");
+let logEverything = false;
 const originalLog = console.log;
 const originalError = console.error;
 
 console.log = function (...args) {
   originalLog.apply(console, args);
+  if (!logEverything) return;
   const message = args
     .map((arg) => (typeof arg === "object" ? JSON.stringify(arg) : String(arg)))
     .join(" ");
@@ -541,6 +543,14 @@ recButton.addEventListener("click", startRecording);
 
 const stopRecButton = document.querySelector("#stopRec-btn");
 stopRecButton.addEventListener("click", stopRecording);
+
+const logCheckbox = document.querySelector("#log-check");
+if (logCheckbox) {
+  logCheckbox.addEventListener("change", () => {
+    console.log("console.log: disabled");
+    logEverything = logCheckbox.checked;
+  });
+}
 
 // Machine listening
 const mlConsole = document.getElementById("ml-console");
