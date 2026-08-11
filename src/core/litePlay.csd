@@ -141,7 +141,7 @@ instr 10
 	isus table p7,25
 	irel table p7,26
 	
-	iamp tablei p5, 5
+	iamp tablei p5,6
 	aenv madsr iatt+1/kr, idec, isus, irel
 	imicro = 2^(frac(p4)/12)
 	kbend table p7,14
@@ -179,7 +179,7 @@ instr 11
 	irel table p7,26
 	ifo table p6,10
 	ifn table p6,9
-	iamp table p5,5
+	iamp table p5,6
 	iln = ftlen(ifn)/(ftsr(ifn)*ftchnls(ifn))
 	imicro = 2^(frac(p4)/12)
 	ipitch = imicro*cpsmidinn(p4)/cpsmidinn(ifo)
@@ -228,7 +228,7 @@ instr 12
 	ire table p7,26
 	ifo table p6,10
 	ifn table p6,9
-	iamp table p5,5
+	iamp table p5,6
 	iln = ftlen(ifn)/(ftsr(ifn)*ftchnls(ifn))
 	imicro = 2^(frac(p4)/12)
 	ipitch = imicro*cpsmidinn(p4)/cpsmidinn(ifo)
@@ -371,7 +371,7 @@ f2 0 1024 -7 127 1024 127
 /* pan (memory) table */
 f3 0 1024 -7 64 1024 127
 f5 0 128 5 0.1 128 1   /* velocity mapping: less nuanced */
-f6 0 128 5 0.01  128 1 /* velocity mapping: more nuanced */
+f6 0 128 5 0.01 128 1 /* velocity mapping: more nuanced */
 f7 0 128 7 0 128 0  /* note on table */
 f8 0 1024 7 0 1024 0  /* reverb amount table */
 f9 0 1024 7 0 1024 0  /* sample table */
