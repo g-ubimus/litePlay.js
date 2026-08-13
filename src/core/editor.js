@@ -21,7 +21,7 @@ import {
 } from "https://esm.sh/extendable-media-recorder";
 import { connect } from "https://esm.sh/extendable-media-recorder-wav-encoder";
 // add essentia
-import { toggleListening } from "../listener/listener.js";
+import { toggleListening, stopListening } from "../listener/listener.js";
 
 // override function to print output in console
 const consoleOutput = document.getElementById("console-output");
@@ -392,7 +392,6 @@ document.addEventListener(
         //const recBtn = document.getElementById("rec-btn");
         //if (recBtn) recBtn.classList.add("ready-red");
 
-        startListener();
       } catch (error) {
         console.error("Failed to auto-start litePlay:", error);
       }
@@ -554,7 +553,6 @@ if (logCheckbox) {
 
 // Machine listening
 const mlConsole = document.getElementById("ml-console");
-let hasListenerStarted = false;
 
 // Create the callback function to handle incoming data
 function handleNewMusicalEvent(eventData) {
@@ -570,21 +568,24 @@ function handleNewMusicalEvent(eventData) {
   }
 }
 
-function startListener() {
-  if (!window.audio_context) {
-    console.error("Start the litePlay engine first!");
-    return;
-  }
-
-  if (hasListenerStarted) return;
-
-  const isNowListening = toggleListening(
-    window.audio_context,
-    handleNewMusicalEvent,
-  );
-
-  if (isNowListening) {
-    hasListenerStarted = true;
-    console.log("Machine Listening successfully running in background.");
-  }
+const listenCheckbox = document.querySelector("#listen-check");
+if (listenCheckbox) {
+  listenCheckbox.addEventListener("change", async () => {
+    if (listenCheckbox.checked) {
+      if (!window.audio_context) {
+        console.error("Start the litePlay engine first!");
+        listenCheckbox.checked = false;
+        return;
+      }
+      try {
+        await toggleListening(window.audio_context, handleNewMusicalEvent);
+        console.log("Machine Listening successfully running in background.");
+      } catch (err) {
+        console.error("Machine Listening failed to start:", err);
+        listenCheckbox.checked = false;
+      }
+    } else {
+      stopListening();
+    }
+  });
 }
