@@ -806,7 +806,7 @@ export async function reset() {
   }
 }
 
-// ─── MIDI Recorder ────────────────────────────────────────────────────────────
+// MIDI Recorder ────────────────────────────────────────────────────────────
 export const midiRecorder = {
   recording: false,
   _events: [],
@@ -1245,6 +1245,8 @@ export function onSus() {
   return new Instrument(rnd(16, 23));
 }
 
+export const onSustained = onSus;
+
 export const nylonAcousticGuitar = new Instrument(24);
 export const guitar = nylonAcousticGuitar;
 export const steelAcousticGuitar = new Instrument(25);
@@ -1428,7 +1430,12 @@ export const drums5 = new Instrument(6, true, 40);
 export const drums6 = new Instrument(7, true, 40);
 
 export function onDrums() {
-  return new Instrument(rndInt(2, 8), true, choose([...membranophoneList, ...idiophoneList]));}
+  return new Instrument(
+    rndInt(2, 8),
+    true,
+    choose([...membranophoneList, ...idiophoneList]),
+  );
+}
 
 export const silently = (ms) => new Promise((r) => setTimeout(r, ms));
 
