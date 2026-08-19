@@ -26,7 +26,6 @@ garev1 init 0
 garev2 init 0
 
 opcode Shift, aa, aak
-	setksmps 0 //get ksmps from input
 	ain1, ain2, kval xin
 	kshift table kval,28 //frequency shifter
 	areal1, aimag1 hilbert ain1
