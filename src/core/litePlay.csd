@@ -175,7 +175,7 @@ instr 10
 	a1 = a1f
 	a2 = a2f
 
-	a1, a2 shift a1, a2, p7
+	a1, a2 Shift a1, a2, p7
 	
 	kvol tablei kv, 5 
 	kpan  table p7, 3
@@ -284,7 +284,7 @@ instr 12
 	a1 = a1f
 	a2 = a2f
 
-	a1, a2 shift a1, a2, p7
+	a1, a2 Shift a1, a2, p7
 
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
