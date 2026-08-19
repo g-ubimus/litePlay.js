@@ -296,6 +296,10 @@ export class Instrument {
     csound.tableSet(25, this.chn, sus);
     csound.tableSet(26, this.chn, rel);
   }
+
+  shift(val) {
+    csound.tableSet(28, this.chn, val);
+  }
 }
 
 export const sample = {
@@ -345,10 +349,6 @@ export class Sampler extends Instrument {
   }
   speed(val) {
     csound.tableSet(16, this.chn, val);
-  }
-
-  shift(val) {
-    csound.tableSet(28, this.chn, val);
   }
 }
 
