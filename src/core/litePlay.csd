@@ -27,11 +27,10 @@ garev2 init 0
 
 opcode Shift, aa, aak
 	ain1, ain2, kval xin
-	kshift table kval,28 //frequency shifter
 	areal1, aimag1 hilbert ain1
 	areal2, aimag2 hilbert ain2
-	asin oscili 1, kshift, 29
-	acos oscili 1, kshift, 29, .25
+	asin oscili 1, kval, 29
+	acos oscili 1, kval, 29, .25
 	aout1 = (areal1*acos - aimag1*asin)
 	aout2 = (areal2*acos - aimag2*asin)
 	xout aout1, aout2
@@ -174,7 +173,8 @@ instr 10
 	a1 = a1f
 	a2 = a2f
 
-	a1, a2 Shift a1, a2, p7
+	kshift table p7,28 //frequency shifter
+	a1, a2 Shift a1, a2, kshift
 	
 	kvol tablei kv, 5 
 	kpan  table p7, 3
@@ -283,7 +283,8 @@ instr 12
 	a1 = a1f
 	a2 = a2f
 
-	a1, a2 Shift a1, a2, p7
+	kshift table p7,28 //frequency shifter
+	a1, a2 Shift a1, a2, kshift 
 
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
