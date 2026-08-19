@@ -346,6 +346,10 @@ export class Sampler extends Instrument {
   speed(val) {
     csound.tableSet(16, this.chn, val);
   }
+
+  shift(val) {
+    csound.tableSet(28, this.chn, val);
+  }
 }
 
 // resolve an instrument or sample object into an Instrument
