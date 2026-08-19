@@ -25,6 +25,18 @@ maxalloc 110, 1
 garev1 init 0
 garev2 init 0
 
+opcode Shift, aa, aak
+	ain1, ain2, kval xin
+	areal1, aimag1 hilbert ain1
+	areal2, aimag2 hilbert ain2
+	asin oscili 1, kval, 29
+	acos oscili 1, kval, 29, .25
+	aout1 = (areal1*acos - aimag1*asin)
+	aout2 = (areal2*acos - aimag2*asin)
+	xout aout1, aout2
+endop
+
+
 //---------------------------------------------
 // this instrument parses MIDI input
 //   to trigger the GM soundfont synthesis
@@ -160,6 +172,9 @@ instr 10
 	a2f vclpf a2,kcf,kres
 	a1 = a1f
 	a2 = a2f
+
+	kshift table p7,28 //frequency shifter
+	a1, a2 Shift a1, a2, kshift
 	
 	kvol tablei kv, 5 
 	kpan  table p7, 3
@@ -267,6 +282,9 @@ instr 12
 	a2f vclpf a2,kcf,kres
 	a1 = a1f
 	a2 = a2f
+
+	kshift table p7,28 //frequency shifter
+	a1, a2 Shift a1, a2, kshift 
 
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
@@ -393,7 +411,8 @@ f24 0 1024 7 0 1024 0  /* d dec */
 f25 0 1024 7 1 1024 1  /* s sus */
 f26 0 1024 -7 0.1 1024 0.1  /* r rel */
 f27 0 1024 7 0 1024 0  /* fil env amount */
-
+f28 0 1024 7 0 1024 0 /* freq shift table */
+f29 0 16384 10 1 /* sine for quadrature osc */
 
 i 1 0 z
 i 100 0 z
