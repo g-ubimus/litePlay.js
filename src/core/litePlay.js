@@ -63,6 +63,8 @@ const globalObj = {
   BPM: 60.0,
   sampnum: 0,
 };
+// hold delay lines
+const delayLines = new Set();
 
 // Csound instrument class
 export class Instrument {
@@ -299,6 +301,25 @@ export class Instrument {
 
   shift(val) {
     csound.tableSet(28, this.chn, val);
+  }
+
+  delay(time, feedback) {
+    if (time <= 0 && feedback <= 0) {
+      this.noDelay();
+      return;
+    }
+    csound.tableSet(30, this.chn, Math.min(Math.max(time, 0), 2));
+    csound.tableSet(31, this.chn, Math.min(Math.max(feedback, 0), 0.99));
+    if (!delayLines.has(this.chn)) {
+      delayLines.add(this.chn);
+      csound.inputMessage("i105." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noDelay() {
+    if (delayLines.delete(this.chn)) {
+      csound.inputMessage("i-105." + this.chn + " 0 0.1 " + this.chn);
+    }
   }
 }
 
@@ -805,6 +826,7 @@ export async function reset() {
     stop();
     sequencer.stop();
     await csound.inputMessage("i 200 0 0.1");
+    delayLines.clear();
   } else {
     console.log("No Csound instance found!");
   }
