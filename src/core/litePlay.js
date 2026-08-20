@@ -296,6 +296,10 @@ export class Instrument {
     csound.tableSet(25, this.chn, sus);
     csound.tableSet(26, this.chn, rel);
   }
+
+  shift(val) {
+    csound.tableSet(28, this.chn, val);
+  }
 }
 
 export const sample = {
@@ -348,8 +352,16 @@ export class Sampler extends Instrument {
   }
 }
 
+// resolve an instrument or sample object into an Instrument
+function toInstr(instr) {
+  if (instr instanceof Instrument) return instr;
+  if (instr && typeof instr === "object" && instr.instr instanceof Instrument)
+    return instr.instr;
+  return null;
+}
+
 function isInstr(instr) {
-  return instr instanceof Instrument;
+  return toInstr(instr) !== null;
 }
 
 // return seconds from beats
@@ -524,7 +536,7 @@ export const sequencer = {
                 let instr_ = evt[4];
                 if (typeof instr_ === "function") theInstr = instr_();
                 else theInstr = instr_;
-                theInstr = isInstr(theInstr) ? theInstr : this.instr;
+                theInstr = toInstr(theInstr) || this.instr;
                 dur = dur > 0 ? dur : theInstr.isDrums ? 0 : this.bbs;
               }
               if (sched >= 0 && pp >= 0 && this.on)
@@ -558,7 +570,7 @@ export const sequencer = {
                   let instr_ = el[4];
                   if (typeof instr_ === "function") theInstr = instr_();
                   else theInstr = instr_;
-                  theInstr = isInstr(theInstr) ? theInstr : this.instr;
+                  theInstr = toInstr(theInstr) || this.instr;
                   dur = dur > 0 ? dur : theInstr.isDrums ? 0 : this.bbs;
                 }
 
@@ -651,7 +663,7 @@ export const eventList = {
         let instr_ = evt.length > 4 ? evt[4] : defInstr;
         if (typeof instr_ === "function") instr = instr_();
         else instr = instr_;
-        instr = isInstr(instr) ? instr : defInstr;
+        instr = toInstr(instr) || defInstr;
 
         let dur_ = evt.length > 3 ? evt[3] : instr.howLong;
         if (typeof dur_ === "function") dur = dur_();
@@ -798,7 +810,7 @@ export async function reset() {
   }
 }
 
-// ─── MIDI Recorder ────────────────────────────────────────────────────────────
+// MIDI Recorder ────────────────────────────────────────────────────────────
 export const midiRecorder = {
   recording: false,
   _events: [],
@@ -1237,6 +1249,8 @@ export function onSus() {
   return new Instrument(rnd(16, 23));
 }
 
+export const onSustained = onSus;
+
 export const nylonAcousticGuitar = new Instrument(24);
 export const guitar = nylonAcousticGuitar;
 export const steelAcousticGuitar = new Instrument(25);
@@ -1420,7 +1434,11 @@ export const drums5 = new Instrument(6, true, 40);
 export const drums6 = new Instrument(7, true, 40);
 
 export function onDrums() {
-  return (new Instrument(rnd(2, 7)), true, rnd(35, 57));
+  return new Instrument(
+    rndInt(2, 8),
+    true,
+    choose([...membranophoneList, ...idiophoneList]),
+  );
 }
 
 export const silently = (ms) => new Promise((r) => setTimeout(r, ms));

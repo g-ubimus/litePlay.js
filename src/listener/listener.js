@@ -1,8 +1,23 @@
-import Essentia from "https://unpkg.com/essentia.js@0.1.3/dist/essentia.js-core.es.min.js";
-import { EssentiaWASM } from "https://unpkg.com/essentia.js@0.1.3/dist/essentia-wasm.es.js";
-
 // System Variables
 let essentia = null;
+let essentiaLoadPromise = null;
+async function getEssentia() {
+  if (!essentia) {
+    if (!essentiaLoadPromise) {
+      essentiaLoadPromise = (async () => {
+        const { default: Essentia } = await import(
+          "https://unpkg.com/essentia.js@0.1.3/dist/essentia.js-core.es.min.js"
+        );
+        const { EssentiaWASM } = await import(
+          "https://unpkg.com/essentia.js@0.1.3/dist/essentia-wasm.es.js"
+        );
+        essentia = new Essentia(EssentiaWASM);
+      })();
+    }
+    await essentiaLoadPromise;
+  }
+  return essentia;
+}
 let isListening = false;
 let workletNode = null;
 let micSource = null;
@@ -31,7 +46,7 @@ window.lastPhrase = [];
 
 // Toggles the machine listening state
 export async function toggleListening(audioCtx, onEventDetected) {
-  if (!essentia) essentia = new Essentia(EssentiaWASM);
+  await getEssentia();
 
   try {
     // Define worklet
@@ -212,7 +227,7 @@ function processEventData(pitches, loudnesses, onsetTime, duration) {
   ];
 }
 
-function stopListening() {
+export function stopListening() {
   if (workletNode && micSource) {
     micSource.disconnect();
     workletNode.disconnect();
@@ -220,4 +235,6 @@ function stopListening() {
     micSource = null;
   }
   isListening = false;
+  essentia = null;
+  essentiaLoadPromise = null;
 }

@@ -275,9 +275,21 @@ describe('Random instrument selectors', () => {
     expect(litePlay.onSomething()).toBeInstanceOf(litePlay.Instrument);
   });
 
-  it('onDrums returns a number (due to comma-operator bug in source)', () => {
-    const result = litePlay.onDrums();
-    expect(typeof result).toBe('number');
+  it('onDrums returns a random drum Instrument (kit 2-7, membranophone or idiophone note)', () => {
+    const drumKits = [2, 3, 4, 5, 6, 7]; // drums1..drums6
+    const drumNotes = [
+      29, 34, 35, 36, 37, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+      51, 52, 53, 54, 55, 57, 58, 59, 63, 64, 65, 66, 67, 68, 71, 72, 81,
+      83, 84, 86, 87, // union of membranophoneList + idiophoneList
+    ];
+
+    for (let i = 0; i < 50; i++) {
+      const result = litePlay.onDrums();
+      expect(result).toBeInstanceOf(litePlay.Instrument);
+      expect(result.isDrums).toBe(true);
+      expect(drumKits).toContain(result.pgm);
+      expect(drumNotes).toContain(result.what_);
+    }
   });
 
   it('onStruck returns an Instrument', () => {
