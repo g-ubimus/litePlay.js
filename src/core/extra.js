@@ -523,8 +523,8 @@ export function ostinato(eventInput, arg2, arg3) {
 
 export function euclidean(eventInput, arg2, arg3, arg4, arg5) {
   let repetitions = 1;
-  let steps = rnd(4, 12);
-  let hits = steps - rnd(1, 3);
+  let steps = rndInt(4, 12);
+  let hits = steps - rndInt(1, 3);
   let rotation = 0;
   let a = [];
   let l = eventList.create();
