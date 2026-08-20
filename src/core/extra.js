@@ -90,7 +90,7 @@ export function edo(divisions) {
 }
 
 export function midiToFrequency(midi) {
-  if (midi <= 0) {
+  if (midi < 0) {
     throw new RangeError("midiToFrequency(): midi must be a positive number.");
   }
   return 440 * Math.pow(2, (midi - 69) / 12);
