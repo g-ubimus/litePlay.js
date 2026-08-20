@@ -173,7 +173,7 @@ const functionSignatures = {
     "rotationSequence([what, howLoud, when, howLong, onSomething], [rhythm])",
   louder: "louder([what, howLoud, when, howLong, onSomething], lastAmp, steps)",
   softer: "softer([what, howLoud, when, howLong, onSomething], lastAmp, steps)",
-  autoPan: "autoPan(instrument, seconds)",
+  autoPan: "autoPan(hertz)",
   glissando:
     "glissando([what, howLoud, when, howLong, onSomething], targetPitch)",
   retrograde: "retrograde([list])",
@@ -217,7 +217,7 @@ const functionSignatures = {
     "euclideano([oQuê, quãoForte, quando, quantoTempo, emAlgo], repetições, passos, ataques, rotação)",
   misturar: "misturar([listaA], [listaB])",
   embaralhar: "embaralhar([lista])",
-  panAutomático: "panAutomático(instrumento, segundos)",
+  panAutomático: "panAutomático(hertz)",
   pare: "pare()",
   instrumento: "instrumento(nomeDoInstrumento)",
   escolha: "escolha(opcao1, opcao2, ...)",
