@@ -705,24 +705,6 @@ export function shuffle(list) {
   return list;
 }
 
-export function autoPan(onSomething, arg2) {
-  let hertz = 1;
-  if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
-    hertz = arg2.hertz ?? hertz;
-  } else {
-    if (arg2 !== undefined) hertz = arg2;
-  }
-
-  if (onSomething.panInterval) {
-    clearInterval(onSomething.panInterval);
-  }
-  onSomething.panInterval = setInterval(() => {
-    let timeInSeconds = Date.now() / 1000;
-    let panValue = Math.sin((timeInSeconds / hertz) * Math.PI * 2);
-    onSomething.pan(panValue);
-  }, 10);
-}
-
 export function glissando(eventInput, arg2) {
   let targetPitch = 60;
   if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
@@ -783,4 +765,3 @@ export const sequenciaRotacao = rotationSequence;
 export const euclideano = euclidean;
 export const misturar = blend;
 export const embaralhar = shuffle;
-export const panAutomático = autoPan;
