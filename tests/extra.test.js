@@ -214,10 +214,11 @@ describe('retrograde', () => {
     expect(extra.retrograde([1, 2, 3, 4])).toEqual([4, 3, 2, 1]);
   });
 
-  it('mutates the original array', () => {
+  it('does not mutate the original array', () => {
     const arr = [1, 2, 3];
-    extra.retrograde(arr);
-    expect(arr).toEqual([3, 2, 1]);
+    const result = extra.retrograde(arr);
+    expect(arr).toEqual([1, 2, 3]);
+    expect(result).toEqual([3, 2, 1]);
   });
 });
 
@@ -260,11 +261,11 @@ describe('shuffle', () => {
     expect(result.sort()).toEqual(input);
   });
 
-  it('mutates the original array', () => {
+  it('does not mutate the original array', () => {
     const input = [1, 2, 3, 4];
-    extra.shuffle(input);
-    expect(input).toHaveLength(4);
-    expect(input.sort()).toEqual([1, 2, 3, 4]);
+    const result = extra.shuffle(input);
+    expect(input).toEqual([1, 2, 3, 4]);
+    expect(result.sort()).toEqual([1, 2, 3, 4]);
   });
 
   it('single-element array stays unchanged', () => {
