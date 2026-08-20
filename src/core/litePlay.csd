@@ -176,13 +176,16 @@ instr 10
 	a2f vclpf a2,kcf,kres
 	a1 = a1f
 	a2 = a2f
-
-	kshift table p7,28 //frequency shifter
+	//frequency shifter
+	kshift table p7,28 
 	a1, a2 Shift a1, a2, kshift
-	
+	//panning
 	kvol tablei kv, 5 
 	kpan  table p7, 3
-	kpan = (kpan - 64)/128
+	krate table p7, 32
+	kbase = (kpan - 64)/128
+	klfo  oscili 0.5, krate, 33
+	kpan  = kbase + klfo
 	a1 *= kvol*(0.5-kpan/2)
 	a2 *= kvol*(0.5+kpan/2)
 	//send to delay 
@@ -214,7 +217,10 @@ instr 11
 	kfade table p6, 13
 	kpitch table p7, 14
 	kpan  table p7, 3
-	kpan = (kpan - 64)/128
+	krate table p7, 32
+	kbase = (kpan - 64)/128
+	klfo  oscili 0.5, krate, 33
+	kpan  = kbase + klfo
 	
 	aenv linenr iamp,0,irel,0.01 
 	if ftchnls(ifn) == 1 then
@@ -261,8 +267,12 @@ instr 12
 	kstart = kstart > 0 ? kstart : 0;
 	klend = kend > 0 ? kend : iln;
 	kpitch table p7, 14
+	//panning
 	kpan  table p7, 3
-	kpan = (kpan - 64)/128
+	krate table p7, 32
+	kbase = (kpan - 64)/128
+	klfo  oscili 0.5, krate, 33
+	kpan  = kbase + klfo
 	ks0  table p6, 15  // sample speed ref per pgm
 	ksp  table p7, 16  // playback speed per chn
 	ksp *= ks0
@@ -446,6 +456,8 @@ f28 0 1024 7 0 1024 0 /* freq shift table */
 f29 0 16384 10 1 /* sine for quadrature osc */
 f30 0 1024 7 0 1024 0  /* delay time */
 f31 0 1024 7 0 1024 0  /* delay feedback */
+f32 0 1024 -7 0 1024 0  /* auto-pan rate (Hz) per channel */
+f33 0 4096 10 1  /* sine wave for auto-pan LFO */
 
 i 1 0 z
 i 100 0 z

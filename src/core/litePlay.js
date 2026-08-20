@@ -269,6 +269,9 @@ export class Instrument {
   }
 
   pan(amount) {
+    if (amount) {
+	this.autoPan(0);
+    }
     csound.tableSet(
       3,
       this.chn,
@@ -281,6 +284,18 @@ export class Instrument {
       2,
       this.chn,
       (amount < 1 ? (amount > 0 ? amount : 0) : 1) * 127,
+    );
+  }
+
+  autoPan(cycleDuration = 1) {
+    if (typeof cycleDuration === "object" && cycleDuration !== null) {
+      cycleDuration =
+        cycleDuration.cycleDuration ?? cycleDuration.hertz ?? 1;
+    }
+    csound.tableSet(
+      32,
+      this.chn,
+      cycleDuration > 0 ? 1 / cycleDuration : 0,
     );
   }
 
@@ -1470,6 +1485,7 @@ export const silently = (ms) => new Promise((r) => setTimeout(r, ms));
 // métodos para objetos
 Instrument.prototype.toque = Instrument.prototype.play;
 Instrument.prototype.pare = Instrument.prototype.stop;
+Instrument.prototype.panAutomático = Instrument.prototype.autoPan;
 
 export const listaEventos = eventList;
 eventList.toque = eventList.play;
