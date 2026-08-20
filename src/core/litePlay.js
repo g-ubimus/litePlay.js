@@ -287,15 +287,11 @@ export class Instrument {
     );
   }
 
-  autoPan(cycleDuration = 1) {
-    if (typeof cycleDuration === "object" && cycleDuration !== null) {
-      cycleDuration =
-        cycleDuration.cycleDuration ?? cycleDuration.hertz ?? 1;
-    }
+  autoPan(hertz) {
     csound.tableSet(
       32,
       this.chn,
-      cycleDuration > 0 ? 1 / cycleDuration : 0,
+      hertz > 0 ? 1 / hertz : 0,
     );
   }
 
