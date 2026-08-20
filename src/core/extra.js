@@ -242,40 +242,51 @@ export function arpeggio(eventInput, arg2, arg3, arg4) {
   return l;
 }
 
-export function melody(eventInput, arg2, arg3) {
-  let pitches;
-  let rhythm;
-  let l = eventList.create();
+export function iterate(eventInput, arg2, arg3, arg4, arg5) {
+  let whats, howLouds, howLongs, onSomethings;
 
   if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
-    pitches = arg2.pitches;
-    rhythm = arg2.rhythm;
+    whats = arg2.what ?? arg2.oque ?? arg2.oQue;
+    howLouds = arg2.howLoud ?? arg2.quãoForte ?? arg2.intensidade;
+    howLongs = arg2.howLong ?? arg2.quãoLongo ?? arg2.duração;
+    onSomethings = arg2.onSomething ?? arg2.noQue;
   } else {
-    pitches = arg2;
-    rhythm = arg3;
+    whats = arg2;
+    howLouds = arg3;
+    howLongs = arg4;
+    onSomethings = arg5;
   }
 
-  if (pitches === undefined && rhythm === undefined) {
-    pitches = randomChord();
-    rhythm = randomRhythm();
-  } else if (pitches === undefined) {
-    pitches = randomChord(rhythm.length);
-  } else if (rhythm === undefined) {
-    rhythm = randomRhythm(pitches.length);
-  }
-
-  if (pitches.length !== rhythm.length) {
-    throw new RangeError(`melody(): size of pitches and rhythm is not equal.`);
-  }
-
-  const [note, howLoud, when, howLong, onSomething] = resolveEvent(eventInput);
+  const [what, howLoud, when, howLong, onSomething] = resolveEvent(eventInput);
   const resolvedWhen = typeof when === "function" ? when() : when;
-  const resolvedHowLong = typeof howLong === "function" ? howLong() : howLong;
-  let currentWhen = resolvedWhen;
+  const resolveVal = (v) => (typeof v === "function" ? v() : v);
+  const toList = (v, fallback) =>
+    v === undefined ? [fallback] : Array.isArray(v) ? v : [v];
 
-  for (let i = 0, len = pitches.length; i < len; i++) {
-    l.add([pitches[i], howLoud, currentWhen, rhythm[i], onSomething]);
-    currentWhen = currentWhen + rhythm[i];
+  const whatList = toList(whats, resolveVal(what));
+  const loudList = toList(howLouds, resolveVal(howLoud));
+  const longList = toList(howLongs, resolveVal(howLong));
+  const onList = toList(onSomethings, resolveVal(onSomething));
+
+  const size = Math.max(
+    whatList.length,
+    loudList.length,
+    longList.length,
+    onList.length,
+  );
+
+  let l = eventList.create();
+  let currentWhen = resolvedWhen;
+  for (let i = 0; i < size; i++) {
+    const duration = resolveVal(longList[i % longList.length]);
+    l.add([
+      resolveVal(whatList[i % whatList.length]),
+      resolveVal(loudList[i % loudList.length]),
+      currentWhen,
+      duration,
+      resolveVal(onList[i % onList.length]),
+    ]);
+    currentWhen += duration;
   }
   return l;
 }
@@ -759,6 +770,7 @@ export const frequênciaParaMidi = frequencyToMidi;
 export const monótono = monotone;
 export const acordeAleatório = randomChord;
 export const arpejo = arpeggio;
+export const iterar = iterate;
 export const sequênciaIntervalar = intervalSequence;
 export const inverter = invert;
 export const maisRápido = faster;
