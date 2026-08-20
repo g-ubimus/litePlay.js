@@ -25,6 +25,22 @@ maxalloc 110, 1
 garev1 init 0
 garev2 init 0
 
+//delay
+gadel[] init 100
+
+//freq shift
+opcode Shift, aa, aak
+	ain1, ain2, kval xin
+	areal1, aimag1 hilbert ain1
+	areal2, aimag2 hilbert ain2
+	asin oscili 1, kval, 29
+	acos oscili 1, kval, 29, .25
+	aout1 = (areal1*acos - aimag1*asin)
+	aout2 = (areal2*acos - aimag2*asin)
+	xout aout1, aout2
+endop
+
+
 //---------------------------------------------
 // this instrument parses MIDI input
 //   to trigger the GM soundfont synthesis
@@ -160,15 +176,23 @@ instr 10
 	a2f vclpf a2,kcf,kres
 	a1 = a1f
 	a2 = a2f
+
+	kshift table p7,28 //frequency shifter
+	a1, a2 Shift a1, a2, kshift
 	
 	kvol tablei kv, 5 
 	kpan  table p7, 3
 	kpan = (kpan - 64)/128
 	a1 *= kvol*(0.5-kpan/2)
 	a2 *= kvol*(0.5+kpan/2)
+	//send to delay 
+	gadel[p7] = gadel[p7] + a1
+	gadel[p7] = gadel[p7] + a2
+	//send to reverb 
 	krev table p7,8
 	garev1 += a1*krev
 	garev2 += a2*krev
+
 	//send to master
 	gaLeft = gaLeft + a1
 	gaRight = gaRight + a2
@@ -268,8 +292,15 @@ instr 12
 	a1 = a1f
 	a2 = a2f
 
+	kshift table p7,28 //frequency shifter
+	a1, a2 Shift a1, a2, kshift 
+
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
+	//send to delay 
+	gadel[p7] = gadel[p7] + a1
+	gadel[p7] = gadel[p7] + a2
+	//send to reverb
 	krev table p7,8
 	garev1 += a1*krev
 	garev2 += a2*krev
@@ -305,6 +336,21 @@ instr 100
 	garev2 = 0
 endin
 
+// delay
+instr 105
+	kdt table p4, 30
+	kfb table p4, 31
+	adl delayr 2.0
+	aecho  deltapi kdt
+	adel = gadel[p4] + aecho*kfb
+	delayw adel
+	gadel[p4] = 0
+	if kdt > 0 then
+		gaLeft = gaLeft + aecho
+		gaRight = gaRight + aecho
+	endif
+endin
+
 // master output
 instr 110
 	a1 clip gaLeft, 0, .99
@@ -325,12 +371,14 @@ instr 200
 	turnoff2 12, 0, 0
 	turnoff2 1, 0, 0
 	turnoff2 100, 0, 0
+	turnoff2 105, 0, 0
 	turnoff2 110, 0, 0
 	
 	turnoff3 10
 	turnoff3 12
 	turnoff3 1
 	turnoff3 100
+	turnoff3 105
 	turnoff3 110
 	schedule(300, .1, 1)
 	turnoff
@@ -340,6 +388,7 @@ endin
 instr 300
 	schedule(1, 0, -1)
 	schedule(100, 0, -1)
+	schedule(105, 0, -1)
 	schedule(110, 0, -1)
 endin
 
@@ -393,7 +442,10 @@ f24 0 1024 7 0 1024 0  /* d dec */
 f25 0 1024 7 1 1024 1  /* s sus */
 f26 0 1024 -7 0.1 1024 0.1  /* r rel */
 f27 0 1024 7 0 1024 0  /* fil env amount */
-
+f28 0 1024 7 0 1024 0 /* freq shift table */
+f29 0 16384 10 1 /* sine for quadrature osc */
+f30 0 1024 7 0 1024 0  /* delay time */
+f31 0 1024 7 0 1024 0  /* delay feedback */
 
 i 1 0 z
 i 100 0 z

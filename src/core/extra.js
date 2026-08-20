@@ -68,11 +68,11 @@ export function midiToName(midiValue) {
   return name;
 }
 
-export function transpose(notes = [], interval = 0) {
-  if (!Array.isArray(notes)) {
+export function transpose(pitches = [], interval = 0) {
+  if (!Array.isArray(pitches)) {
     throw new TypeError("transpose(): first argument must be an array.");
   }
-  return notes.map((i) => i + interval);
+  return pitches.map((i) => i + interval);
 }
 
 export function edo(divisions) {
@@ -153,23 +153,23 @@ export function randomChord(arg1, arg2, arg3) {
   if (size < 1) {
     throw new RangeError(`randomChord(): size (${size}) must be at least 1.`);
   }
-  let notes = new Set();
+  let pitches = new Set();
   let maxAttempts = range != midPitch ? 36 : 24;
 
   let attempts = 0;
   let getPitch;
 
-  while (notes.size < size && attempts < maxAttempts) {
+  while (pitches.size < size && attempts < maxAttempts) {
     if (microtonal === false) {
       getPitch = Math.round(range());
     } else {
       getPitch = range();
     }
-    notes.add(getPitch);
+    pitches.add(getPitch);
     attempts++;
   }
 
-  return Array.from(notes).sort((a, b) => a - b);
+  return Array.from(pitches).sort((a, b) => a - b);
 }
 
 export function blockChord(eventInput, arg2) {
@@ -238,6 +238,55 @@ export function arpeggio(eventInput, arg2, arg3, arg4) {
       l.add([note, howLoud, currentTime, resolvedHowLong, onSomething]);
       currentTime += resolvedHowLong;
     }
+  }
+  return l;
+}
+
+export function iterate(eventInput, arg2, arg3, arg4, arg5) {
+  let whats, howLouds, howLongs, onSomethings;
+
+  if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
+    whats = arg2.what ?? arg2.oque ?? arg2.oQue;
+    howLouds = arg2.howLoud ?? arg2.quãoForte ?? arg2.intensidade;
+    howLongs = arg2.howLong ?? arg2.quãoLongo ?? arg2.duração;
+    onSomethings = arg2.onSomething ?? arg2.noQue;
+  } else {
+    whats = arg2;
+    howLouds = arg3;
+    howLongs = arg4;
+    onSomethings = arg5;
+  }
+
+  const [what, howLoud, when, howLong, onSomething] = resolveEvent(eventInput);
+  const resolvedWhen = typeof when === "function" ? when() : when;
+  const resolveVal = (v) => (typeof v === "function" ? v() : v);
+  const toList = (v, fallback) =>
+    v === undefined ? [fallback] : Array.isArray(v) ? v : [v];
+
+  const whatList = toList(whats, resolveVal(what));
+  const loudList = toList(howLouds, resolveVal(howLoud));
+  const longList = toList(howLongs, resolveVal(howLong));
+  const onList = toList(onSomethings, resolveVal(onSomething));
+
+  const size = Math.max(
+    whatList.length,
+    loudList.length,
+    longList.length,
+    onList.length,
+  );
+
+  let l = eventList.create();
+  let currentWhen = resolvedWhen;
+  for (let i = 0; i < size; i++) {
+    const duration = resolveVal(longList[i % longList.length]);
+    l.add([
+      resolveVal(whatList[i % whatList.length]),
+      resolveVal(loudList[i % loudList.length]),
+      currentWhen,
+      duration,
+      resolveVal(onList[i % onList.length]),
+    ]);
+    currentWhen += duration;
   }
   return l;
 }
@@ -521,6 +570,31 @@ export function ostinato(eventInput, arg2, arg3) {
   return l;
 }
 
+export function randomRhythm(arg1, arg2) {
+  let size = 4;
+  let range = midDur;
+
+  if (typeof arg1 === "object" && arg1 !== null && !Array.isArray(arg1)) {
+    size = arg1.size ?? size;
+    range = arg1.range ?? range;
+  } else {
+    if (arg1 !== undefined) size = arg1;
+    if (arg2 !== undefined) range = arg2;
+  }
+  if (size < 1) {
+    throw new RangeError(`randomRhythm(): size (${size}) must be at least 1.`);
+  }
+  let durations = [];
+  let getDuration;
+
+  while (durations.length < size) {
+    getDuration = range();
+    durations.push(getDuration);
+  }
+
+  return durations;
+}
+
 export function euclidean(eventInput, arg2, arg3, arg4, arg5) {
   let repetitions = 1;
   let steps = rndInt(4, 12);
@@ -696,6 +770,7 @@ export const frequênciaParaMidi = frequencyToMidi;
 export const monótono = monotone;
 export const acordeAleatório = randomChord;
 export const arpejo = arpeggio;
+export const iterar = iterate;
 export const sequênciaIntervalar = intervalSequence;
 export const inverter = invert;
 export const maisRápido = faster;
