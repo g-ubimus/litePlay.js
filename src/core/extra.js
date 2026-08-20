@@ -519,7 +519,7 @@ export function retrograde(list) {
   if (!Array.isArray(list)) {
     throw new TypeError("retrograde(): argument must be an array.");
   }
-  return list.reverse();
+  return [...list].reverse();
 }
 
 export function rotate(list, steps = 1) {
@@ -698,11 +698,12 @@ export function shuffle(list) {
     throw new TypeError("shuffle(): argument must be an array.");
   }
   //Fisher–Yates shuffle
-  for (let i = list.length - 1; i >= 1; i--) {
+  const shuffled = [...list];
+  for (let i = shuffled.length - 1; i >= 1; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [list[i], list[j]] = [list[j], list[i]];
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return list;
+  return shuffled;
 }
 
 export function glissando(eventInput, arg2) {
