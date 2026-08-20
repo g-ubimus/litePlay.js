@@ -158,6 +158,8 @@ const functionSignatures = {
     "arpeggio([what, howLoud, when, howLong, onSomething], [chord], repetitions, direction)",
   intervalSequence:
     "intervalSequence([what, howLoud, when, howLong, onSomething], interval, repetitions, direction)",
+  iterate:
+    "iterate([what, howLoud, when, howLong, onSomething], {what: [], howLoud: [], howLong: [], onSomething: []})",
   invert: "invert([melody], axis)",
   faster:
     "faster([what, howLoud, when, howLong, onSomething], lastDuration, steps)",
@@ -196,6 +198,8 @@ const functionSignatures = {
     "arpejo([oQuê, quãoForte, quando, quantoTempo, emAlgo], [acorde], repetições, direção)",
   sequênciaIntervalar:
     "sequênciaIntervalar([oQuê, quãoForte, quando, quantoTempo, emAlgo], intervalo, repetições, direção)",
+  iterar:
+    "iterar([oQuê, quãoForte, quando, quantoTempo, emAlgo], {oQuê: [], quãoForte: [], quantoTempo: [], emAlgo: []})",
   inverter: "inverter([melodia], eixo)",
   maisRápido:
     "maisRápido([oQuê, quãoForte, quando, quantoTempo, emAlgo], passos, razão<1)",
@@ -391,7 +395,6 @@ document.addEventListener(
 
         //const recBtn = document.getElementById("rec-btn");
         //if (recBtn) recBtn.classList.add("ready-red");
-
       } catch (error) {
         console.error("Failed to auto-start litePlay:", error);
       }
