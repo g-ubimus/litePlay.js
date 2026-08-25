@@ -20,9 +20,12 @@ syntax required.
 - [Waveshaping and Phase Distortion — `distortion()`](#waveshaping-and-phase-distortion)
 - [Standard Filters — `highpass()`](#standard-filters)
 - [Specialized Filters — `moogFilter()`, `combFilter()`](#specialized-filters)
+- [Waveguides — `stringResonance()`](#waveguides)
 - [Amplitude Modifiers and Dynamic Processing — `compressor()`, `tremolo()`](#amplitude-modifiers-and-dynamic-processing)
+- [Signal Limiters — `limiter()`](#signal-limiters)
 - [Special Effects — `ringModulate()`, `flanger()`, `chorus()`, `phaser()`](#special-effects)
 - [Sample Level Operators — `sampleHold()`](#sample-level-operators)
+- [Convolution and Morphing — `convolve()`](#convolution-and-morphing)
 - [Reverberation — `reverbTone()`](#reverberation)
 - [What's not in here yet](#whats-not-in-here-yet)
 
@@ -48,6 +51,9 @@ this file to a project changes nothing about how existing sketches sound.
 | `instrument.chorus(rate, depth)` / `.noChorus()` | Special Effects | [`flanger`](https://csound.com/docs/manual/flanger.html) |
 | `instrument.phaser(rate, stages, feedback)` / `.noPhaser()` | Special Effects | [`phaser1`](https://csound.com/docs/manual/phaser1.html) |
 | `instrument.combFilter(decay, delayTime)` / `.noCombFilter()` | Specialized Filters | [`comb`](https://csound.com/docs/manual/comb.html) |
+| `instrument.stringResonance(frequency, feedback, mix)` | Waveguides | [`streson`](https://csound.com/docs/manual/streson.html) |
+| `instrument.limiter(ceiling)` | Signal Limiters | [`clip`](https://csound.com/docs/manual/clip.html) |
+| `instrument.convolve(amount)` / `.noConvolve()` | Convolution and Morphing | [`pconvolve`](https://csound.com/docs/manual/pconvolve.html) |
 | `reverbTone(size, damping)` (global, not per-instrument) | Reverberation | [`freeverb`](https://csound.com/docs/manual/freeverb.html) |
 
 ## Waveshaping and Phase Distortion
@@ -115,6 +121,27 @@ lpRun(f);
 marimba.noCombFilter();
 ```
 
+## Waveguides
+
+**`instrument.stringResonance(frequency, feedback = 0.9, mix = 1)`** — adds
+sympathetic string resonance via
+[`streson`](https://csound.com/docs/manual/streson.html), a comb/lowpass/
+allpass network similar to the one used in Karplus-Strong string synthesis.
+Rather than modeling a whole plucked-string instrument from scratch, this
+treats the instrument's own sound as the "excitation" of a resonant string —
+so any note can pick up a ringing, sympathetic-string character. `frequency`
+sets the resonant pitch in Hz, `feedback` (`-0.99` to `0.99`) controls decay
+time and intensity (near `1` = slow decay, pronounced resonance), `mix`
+blends dry/wet.
+
+```JavaScript
+function f() {
+  harp.stringResonance(220, 0.93);
+  play(A3);
+}
+lpRun(f);
+```
+
 ## Amplitude Modifiers and Dynamic Processing
 
 **`instrument.compressor(amount, threshold = 0.3)`** — a dynamics
@@ -137,6 +164,24 @@ lpRun(f);
 function f() {
   organ.tremolo(6, 0.6);
   play(G3);
+}
+lpRun(f);
+```
+
+## Signal Limiters
+
+**`instrument.limiter(ceiling)`** — a hard-ceiling limiter via
+[`clip`](https://csound.com/docs/manual/clip.html), the same opcode litePlay
+already uses internally on its master output, but exposed per-instrument and
+tuned (`iarg=1`) so it's an exact hard clip at `ceiling` rather than a soft
+knee — simple and predictable. `ceiling` is `0.05`-`1` (default `1`, which is
+effectively off for typical signal levels since normal output already stays
+under `1`); lower it for a more aggressive, crunchy ceiling.
+
+```JavaScript
+function f() {
+  drums.limiter(0.3);
+  play(kick);
 }
 lpRun(f);
 ```
@@ -228,6 +273,34 @@ function f() {
 lpRun(f);
 ```
 
+## Convolution and Morphing
+
+**`instrument.convolve(amount)`** / **`instrument.noConvolve()`** — a real
+convolution reverb via [`pconvolve`](https://csound.com/docs/manual/pconvolve.html),
+convolving the instrument's sound against an actual impulse response (IR) —
+a recording of how a real (or synthetic) space responds to a click, which is
+what gives convolution reverb its distinctively "real space" character
+compared to the algorithmic `freeverb` behind `reverb()`. litePlay ships with
+one bundled IR (`assets/audio/ir_room.wav`, a small synthetic room impulse
+generated with Csound itself, so there's no licensing question) loaded
+automatically at startup. `amount` (`0`-`1`) is how much of the instrument's
+sound is sent to it, same convention as `reverb()`.
+
+```JavaScript
+function f() {
+  piano.convolve(0.6);
+  play(C4);
+}
+lpRun(f);
+
+// later
+piano.noConvolve();
+```
+
+> Like `flanger()`/`chorus()`/`phaser()`/`combFilter()`, this is a
+> per-channel bus effect: it only costs anything while at least one
+> instrument has it turned on.
+
 ## Reverberation
 
 litePlay already has per-instrument `reverb(amount)` (how much of *that*
@@ -251,23 +324,25 @@ entirely optional.
 
 ## What's not in here yet
 
-Csound's Signal Modifiers page also lists a few groups that don't fit
-litePlay's current shape, deliberately left out rather than shipped half-working:
+Every category on Csound's Signal Modifiers page now has at least one
+implementation here. A few smaller gaps remain, deliberately left out rather
+than shipped half-working:
 
-- **Convolution and Morphing** (`ftconv`, `pconvolve`, `dconv`) — real
-  convolution reverb needs an impulse-response audio file loaded in, the same
-  way `sample.load()` loads a sample. That's a natural next step (imagine
-  `instrument.convolve(irFile)`), but it's a bigger, separate feature — new
-  asset loading, plus a CPU cost per active convolution that needs real
-  headroom testing — not a single opcode to wire in.
-- **Signal Limiters** (`limit`, `mirror`, and friends) — in Csound these
-  clamp/fold a control *value*, not audio; there's no user-facing "limiter
-  knob" to expose here that isn't just another distortion/compressor variant,
-  which are covered above.
-- **Waveguides** (`wguide1`, `streson`, physical modeling) — these model the
-  physical body of an instrument reacting to an excitation signal, which
-  doesn't map cleanly onto litePlay's GM-soundfont-plus-effects note model
-  without a much larger rethink of how a note gets triggered.
+- **Custom impulse responses for `convolve()`** — right now there's exactly
+  one bundled IR (`ir_room.wav`). Loading your *own* IR file works the same
+  way `sample.load()` already loads a sample (fetch it into Csound's virtual
+  filesystem, point `pconvolve` at the new filename) — a natural follow-up,
+  just not built yet.
+- **Full physical-modeling instruments** (`wguide1`, `pluck`, and friends) —
+  `stringResonance()` covers the Waveguides category by adding resonance to
+  an *existing* sound, which is what fits litePlay's note-triggered signal
+  chain; actually modeling a plucked string or blown tube *from scratch*
+  (synthesizing the excitation itself, not just resonating an existing one)
+  would need a new kind of instrument, not just another Signal Modifier.
+- **Csound's "Morphing" opcodes specifically** (spectral cross-synthesis
+  between two sounds, e.g. via `pvsmorph`) — meaningfully different from
+  convolution (which `pconvolve` now covers) and would need a second signal
+  source to morph *with*, which doesn't fit a single-instrument effect method.
 
 If you build one of these, the existing methods above are the template to
 follow: one Csound opcode (or a small UDO), one or two per-channel function

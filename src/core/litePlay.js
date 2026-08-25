@@ -10,6 +10,8 @@ const srcurl = new URL("../../", import.meta.url).href;
 // CSD file name
 const csd = "src/core/litePlay.csd";
 const sfont = "assets/audio/gm.sf2";
+// bundled impulse response for the convolve() Signal Modifier
+const defaultIR = "assets/audio/ir_room.wav";
 
 // this is the JS function to start Csound
 export async function startEngine() {
@@ -27,6 +29,8 @@ export async function startEngine() {
     await csound.setOption("-M0");
     // copy the sfont file to the Csound local filesystem
     await copyUrlToLocal(srcurl + sfont, "gm.sf2");
+    // copy the bundled impulse response used by convolve()
+    await copyUrlToLocal(srcurl + defaultIR, "ir_room.wav");
     // copy the CSD file to the Csound local filesystem
     await copyUrlToLocal(srcurl + csd, csd);
     // compile csound code
@@ -70,6 +74,7 @@ const flangerLines = new Set();
 const chorusLines = new Set();
 const phaserLines = new Set();
 const combLines = new Set();
+const convolveLines = new Set();
 
 // Csound instrument class
 export class Instrument {
@@ -484,6 +489,46 @@ export class Instrument {
     if (combLines.delete(this.chn)) {
       csound.inputMessage("i-109." + this.chn + " 0 0.1 " + this.chn);
     }
+  }
+
+  // Convolution and Morphing: real impulse-response convolution via Csound's
+  // `pconvolve`, a per-channel bus effect reading the bundled "ir_room.wav".
+  convolve(amount) {
+    const a = Number.isFinite(amount) ? amount : 0;
+    if (a <= 0) {
+      this.noConvolve();
+      return;
+    }
+    csound.tableSet(63, this.chn, a < 1 ? a : 1);
+    if (!convolveLines.has(this.chn)) {
+      convolveLines.add(this.chn);
+      csound.inputMessage("i111." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noConvolve() {
+    csound.tableSet(63, this.chn, 0);
+    if (convolveLines.delete(this.chn)) {
+      csound.inputMessage("i-111." + this.chn + " 0 0.1 " + this.chn);
+    }
+  }
+
+  // Signal Limiters: a hard-ceiling limiter via Csound's `clip`.
+  limiter(ceiling) {
+    csound.tableSet(
+      64,
+      this.chn,
+      ceiling < 1 ? (ceiling > 0.05 ? ceiling : 0.05) : 1,
+    );
+  }
+
+  // Waveguides: string/sympathetic resonance via Csound's `streson`, treating
+  // the instrument's own sound as the "excitation" of a resonant string.
+  stringResonance(frequency, feedback = 0.9, mix = 1) {
+    const fb = Number.isFinite(feedback) ? feedback : 0.9;
+    csound.tableSet(65, this.chn, frequency > 0 ? frequency : 440);
+    csound.tableSet(66, this.chn, Math.min(Math.max(fb, -0.99), 0.99));
+    csound.tableSet(67, this.chn, mix < 1 ? (mix > 0 ? mix : 0) : 1);
   }
 }
 
@@ -1002,6 +1047,7 @@ export async function reset() {
     chorusLines.clear();
     phaserLines.clear();
     combLines.clear();
+    convolveLines.clear();
   } else {
     console.log("No Csound instance found!");
   }

@@ -42,6 +42,9 @@ gachorus[] init 100
 gaphaser[] init 100
 gacomb[] init 100
 
+//convolution reverb send (per-channel bus effect)
+gaconv[] init 100
+
 //freq shift
 opcode Shift, aa, aak
 	ain1, ain2, kval xin
@@ -157,6 +160,48 @@ opcode SampleHold, aa, aak
 	ah2 samphold ain2, agate
 	aout1 = ain1*(1-kmix) + ah1*kmix
 	aout2 = ain2*(1-kmix) + ah2*kmix
+	xout aout1, aout2
+endop
+
+//Signal Limiters: a hard-ceiling limiter via `clip` (imeth=0/Bram de Jong,
+//the same method litePlay's own master bus already uses, but with iarg=1
+//so the curve collapses to an exact hard clip at the ceiling rather than
+//the soft asymptotic knee - a simpler, more predictable "ceiling" control).
+//imeth/ilimit/iarg are i-rate only in Csound (fixed for the note's life), so
+//the ceiling is read once at note-init via i(kchn), matching the existing
+//i-rate table-read pattern used for envelope times elsewhere in this file.
+//table 64: ceiling (0.05-1, default 1 = effectively no limiting for typical
+//signal levels, since normal output already stays under 1)
+opcode Limiter, aa, aak
+	ain1, ain2, kchn xin
+	ichn = i(kchn)
+	iceil table ichn, 64
+	iceil = iceil > 0.05 ? (iceil <= 1 ? iceil : 1) : 0.05
+	al1 clip ain1, 0, iceil, 1
+	al2 clip ain2, 0, iceil, 1
+	xout al1, al2
+endop
+
+//Waveguides: string/sympathetic resonance via `streson` (a comb/lowpass/
+//allpass network similar to Karplus-Strong, treating the existing synth
+//signal as an "excitation" rather than modelling a whole instrument from
+//scratch - this is what lets a waveguide-family opcode fit into litePlay's
+//note-triggered signal chain as a Signal Modifier rather than a full
+//physical-modelling instrument).
+//table 65: frequency in Hz; table 66: feedback (-0.99 to 0.99, clamped away
+//from +-1 so the resonance is always guaranteed to decay); table 67: mix
+//(0-1, 0 = exact bypass - streson's own kfdbgain=0 is only an approximate,
+//not guaranteed exact, bypass per the Csound manual, hence the crossfade)
+opcode StringResonance, aa, aak
+	ain1, ain2, kchn xin
+	kfreq table kchn, 65
+	kfb table kchn, 66
+	kmix table kchn, 67
+	kfb = kfb > 0.99 ? 0.99 : (kfb < -0.99 ? -0.99 : kfb)
+	as1 streson ain1, kfreq, kfb
+	as2 streson ain2, kfreq, kfb
+	aout1 = ain1*(1-kmix) + as1*kmix
+	aout2 = ain2*(1-kmix) + as2*kmix
 	xout aout1, aout2
 endop
 
@@ -305,6 +350,8 @@ instr 10
 	a1, a2 Tremolo a1, a2, p7
 	a1, a2 RingMod a1, a2, p7
 	a1, a2 SampleHold a1, a2, p7
+	a1, a2 StringResonance a1, a2, p7
+	a1, a2 Limiter a1, a2, p7
 	//panning
 	kvol tablei kv, 5
 	kpan  table p7, 3
@@ -342,6 +389,13 @@ instr 10
 	if kcbon > 0 then
 		gacomb[p7] = gacomb[p7] + a1
 		gacomb[p7] = gacomb[p7] + a2
+	endif
+	//send to convolution reverb (gated on kconv, same "amount>0" convention
+	//already used for the delay send and the existing reverb send below)
+	kconv table p7, 63
+	if kconv > 0 then
+		gaconv[p7] = gaconv[p7] + a1*kconv
+		gaconv[p7] = gaconv[p7] + a2*kconv
 	endif
 	//send to reverb
 	krev table p7,8
@@ -465,6 +519,8 @@ instr 12
 	a1, a2 Tremolo a1, a2, p7
 	a1, a2 RingMod a1, a2, p7
 	a1, a2 SampleHold a1, a2, p7
+	a1, a2 StringResonance a1, a2, p7
+	a1, a2 Limiter a1, a2, p7
 
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
@@ -496,6 +552,13 @@ instr 12
 	if kcbon > 0 then
 		gacomb[p7] = gacomb[p7] + a1
 		gacomb[p7] = gacomb[p7] + a2
+	endif
+	//send to convolution reverb (gated on kconv, same "amount>0" convention
+	//already used for the delay send and the existing reverb send below)
+	kconv table p7, 63
+	if kconv > 0 then
+		gaconv[p7] = gaconv[p7] + a1*kconv
+		gaconv[p7] = gaconv[p7] + a2*kconv
 	endif
 	//send to reverb
 	krev table p7,8
@@ -618,6 +681,22 @@ instr 109
 	gaRight = gaRight + acb
 endin
 
+// convolution reverb (Convolution and Morphing: real impulse-response
+// convolution via `pconvolve`, reading directly from the bundled synthetic
+// impulse response "ir_room.wav" loaded into Csound's virtual filesystem at
+// engine startup - see startEngine() in litePlay.js). ipartitionsize (1024)
+// trades a little added latency for a real-time-safe CPU cost; the IR is
+// mono, so pconvolve returns a single wet channel that gets mixed equally
+// into both outputs, matching how the other per-channel bus effects above
+// fold L+R into one send and reinject the wet result symmetrically.
+instr 111
+	ain = gaconv[p4]
+	awet pconvolve ain, "ir_room.wav", 1024
+	gaconv[p4] = 0
+	gaLeft = gaLeft + awet
+	gaRight = gaRight + awet
+endin
+
 // master output
 instr 110
 	a1 clip gaLeft, 0, .99
@@ -643,6 +722,7 @@ instr 200
 	turnoff2 107, 0, 0
 	turnoff2 108, 0, 0
 	turnoff2 109, 0, 0
+	turnoff2 111, 0, 0
 	turnoff2 110, 0, 0
 
 	turnoff3 10
@@ -654,6 +734,7 @@ instr 200
 	turnoff3 107
 	turnoff3 108
 	turnoff3 109
+	turnoff3 111
 	turnoff3 110
 	schedule(300, .1, 1)
 	turnoff
@@ -754,6 +835,11 @@ f59 0 1024 -7 0 1024 0  /* flanger active flag (0/1) */
 f60 0 1024 -7 0 1024 0  /* chorus active flag (0/1) */
 f61 0 1024 -7 0 1024 0  /* phaser active flag (0/1) */
 f62 0 1024 -7 0 1024 0  /* comb filter active flag (0/1) */
+f63 0 1024 -7 0 1024 0  /* convolution reverb send amount (0 = off) */
+f64 0 1024 -7 1 1024 1  /* limiter ceiling (1 = effectively off) */
+f65 0 1024 -7 440 1024 440  /* string resonance frequency (Hz) */
+f66 0 1024 -7 0.9 1024 0.9  /* string resonance feedback */
+f67 0 1024 -7 0 1024 0  /* string resonance mix (0 = off) */
 
 i 1 0 z
 i 100 0 z
