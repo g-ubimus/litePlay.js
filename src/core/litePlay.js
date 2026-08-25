@@ -78,7 +78,7 @@ const convolveLines = new Set();
 
 // Csound instrument class
 export class Instrument {
-  constructor(pgm, isDrums = false, what = 60.0, instr = 10) {
+  constructor(pgm, isDrums = false, what = 60.0, instr = 10, bankOffset = 0) {
     this.pgm = pgm;
     this.chn = globalObj.freeChannel;
     globalObj.freeChannel =
@@ -91,6 +91,9 @@ export class Instrument {
     this.howLong = 1;
     this.on = new Uint8Array(128);
     this.instr = instr;
+    // which soundfont bank's presets this instrument addresses (0 = the
+    // built-in gm.sf2; see the `soundfont` export for additional banks)
+    this.bankOffset = bankOffset;
   }
 
   what(snd) {
@@ -98,10 +101,10 @@ export class Instrument {
   }
 
   score(what, howLoud, when, howLong) {
-    let prog = this.pgm;
+    let prog = this.bankOffset + this.pgm;
     let instr = this.instr + what / 1000000 + this.chn / globalObj.maxChannel;
     if (this.isDrums) {
-      if (prog == 7) csound.tableSet(26, this.chn, 2);
+      if (this.pgm == 7) csound.tableSet(26, this.chn, 2);
       else csound.tableSet(26, this.chn, 0.5);
       if (what == 29 || what == 30) instr = 10.97;
       else if (what == 42 || what == 44 || what == 46 || what == 49)
@@ -111,7 +114,10 @@ export class Instrument {
       else if (what == 78 || what == 79) instr = 10.94;
       else if (what == 80 || what == 81) instr = 10.95;
       else if (what == 86 || what == 87) instr = 10.96;
-      prog = 317 + this.pgm;
+      // "+317" is where gm.sf2's own drum kit happens to land in the
+      // sfpassign preset order; a different soundfont's percussion presets
+      // aren't guaranteed to follow the same layout (see `soundfont` below).
+      prog = this.bankOffset + 317 + this.pgm;
     }
 
     if (howLong <= 0) this.on[what] = 1;
@@ -581,6 +587,31 @@ export class Sampler extends Instrument {
     csound.tableSet(16, this.chn, val);
   }
 }
+
+// A second, independently-addressable soundfont bank, loaded on demand at
+// runtime (see instr 3 in litePlay.csd) rather than bundled with litePlay -
+// point this at any .sf2 file you have the rights to use. Its presets land
+// at preset index 1000+, so they never collide with the built-in gm.sf2
+// bank; instrument(pgm) hands back a regular Instrument bound to that
+// offset, so everything else (play(), effects, the sequencer...) works
+// exactly like any other litePlay instrument. Percussion-kit mapping (the
+// "+317" used for gm.sf2's own drum kits) is specific to gm.sf2's internal
+// preset layout, so isDrums here is left to the caller to opt into
+// deliberately rather than assumed.
+export const soundfont = {
+  offset: 1000,
+  loaded: false,
+  load: function (url) {
+    return copyUrlToLocal(url, "localsf.sf2").then(() => {
+      csound.inputMessage('i3 0 0.1 "localsf.sf2"');
+      this.loaded = true;
+      return this;
+    });
+  },
+  instrument: function (pgm, isDrums = false, what = 60.0) {
+    return new Instrument(pgm, isDrums, what, 10, this.offset);
+  },
+};
 
 // resolve an instrument or sample object into an Instrument
 function toInstr(instr) {

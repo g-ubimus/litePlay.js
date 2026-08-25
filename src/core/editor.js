@@ -91,7 +91,7 @@ const stopLP = async (event) => {
 
 // import constants for autocompletion
 import * as litePlayLang from "./litePlay.js";
-import { midiRecorder } from "./litePlay.js";
+import { midiRecorder, soundfont } from "./litePlay.js";
 import * as extra from "./extra.js";
 import * as listener from "../listener/listener.js";
 const lpKeys = Object.keys(litePlayLang);
@@ -635,6 +635,29 @@ document
     window[varName] = userSample;
     console.log(
       `Successfully uploaded ${fileName}.\n Use '${varName}' to access it in your code.`,
+    );
+  });
+
+// add soundfont: load a .sf2 file as a second, independent bank of 128
+// instruments, addressed via soundfont.instrument(programNumber)
+document
+  .getElementById("soundfont-btn")
+  .addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!csound) {
+      console.log("Start engine before uploading a soundfont...");
+      return;
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    await csound.fs.writeFile("localsf.sf2", new Uint8Array(arrayBuffer));
+    csound.inputMessage('i3 0 0.1 "localsf.sf2"');
+    soundfont.loaded = true;
+    console.log(
+      `Successfully loaded ${file.name} as a second soundfont bank.\n` +
+        "Use soundfont.instrument(programNumber) to get an instrument from it, e.g.:\n" +
+        "let altPiano = soundfont.instrument(0);\naltPiano.play(C4);",
     );
   });
 

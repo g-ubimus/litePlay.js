@@ -43,6 +43,10 @@
 					<button class="button" id="load-sample-btn" onclick="document.getElementById('sample-btn').click()">
 					    &#8682; <b>ADD SAMPLE</b>
 					</button>
+					<input type="file" id="soundfont-btn" style="display:none" accept=".sf2">
+					<button class="button" id="load-soundfont-btn" title="Load a .sf2 file as a second, independent set of 128 instruments" onclick="document.getElementById('soundfont-btn').click()">
+					    &#9835; <b>ADD SOUNDFONT</b>
+					</button>
 					<button class="button" id="theme-btn" onclick="var b=document.body;b.classList.toggle('light');var l=b.classList.contains('light');this.innerHTML=l?'&#9790;':'&#9788;';document.querySelector('meta[name=theme-color]').content=l?'#f5f5f5':'#2d2d2d'">&#9788;</button>
 				</div>
 				<div id="editor-container" class="cm-container"></div>

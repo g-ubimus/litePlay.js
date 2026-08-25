@@ -585,6 +585,20 @@ tablew ign,p6,9
 tablew p5,p6,10
 endin
 
+// loading a second soundfont bank (mirrors instr 2's dynamic sample
+// loading above). p4 is a filename already materialized in the WASM
+// filesystem; its presets land at preset index 1000+, comfortably clear of
+// the built-in gm.sf2 bank's own used range (melodic 0-127, drum kit
+// 317-444), so both banks stay addressable through the same sfplay call in
+// instr 10 via one global preset index (see Instrument's bankOffset in
+// litePlay.js).
+// i3 0 0 "soundfont.sf2"
+instr 3
+Sfile = p4
+gisf2 sfload Sfile
+sfpassign 1000, gisf2
+endin
+
 // reverb
 instr 100
 	ksize table 0, 57
