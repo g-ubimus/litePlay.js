@@ -17,32 +17,47 @@
 		<h1>litePlay</h1>
 		<div class="text">
 			<p>
-			<br>New to litePlay? Read the <b><a href="https://g-ubimus.github.io/litePlay.docs/" target="_blank">docs</a></b>.</p>
+			<br>New to litePlay? Read the <b><a href="https://g-ubimus.github.io/litePlay.docs/" target="_blank">docs</a></b>. Don't know where to start? Click a card in the <b>Snippets</b> panel and press <b>RUN</b>.</p>
 		</div>
-		
-		<div class="btn-row">
-			<button class="button" id="run-btn" title="Ctrl+Enter">&#9654; <b>RUN</b></button>
-			<button class="button" id="stop-btn" title="Ctrl+.">&#9724; <b>STOP</b></button>
-			<button class="button" id="save-btn" title="Ctrl+S">&#9660; <b>SAVE CODE</b></button>
-			<button class="button" id="rec-btn">&#9673; <b>REC</b></button>
-			<button class="button" id="stopRec-btn">&#9689; <b>STOP REC</b></button>
-			<input type="file" id="sample-btn" style="display:none" accept="audio/*">
-			<button class="button" id="load-sample-btn" onclick="document.getElementById('sample-btn').click()">
-			    &#8682; <b>ADD SAMPLE</b>
-			</button>
-			<button class="button" id="theme-btn" onclick="var b=document.body;b.classList.toggle('light');var l=b.classList.contains('light');this.innerHTML=l?'&#9790;':'&#9788;';document.querySelector('meta[name=theme-color]').content=l?'#f5f5f5':'#2d2d2d'">&#9788;</button>
-		</div>
-		<div id="editor-container" class="cm-container"></div>
-		<div class="editor-row">
-		<textarea id="ml-console" autocomplete="off" readonly class="listenc" placeholder="Machine Listening ouput will appear here..."></textarea>
-		<textarea id="console-output" autocomplete="off" readonly class="console" placeholder="Click anywhere to start litePlay."></textarea>
-		<br>
-		<label for="log-check">
-		Log: <input type="checkbox" id="log-check">
-		</label>
-		<label for="listen-check">
-		Listen: <input type="checkbox" id="listen-check">
-		</label>
+
+		<div class="workspace">
+			<aside id="snippet-panel" class="snippet-panel">
+				<div class="snippet-panel-header">
+					<h2>Snippets</h2>
+					<button class="button" id="snippet-close-btn" aria-label="Hide snippets panel" title="Hide panel">&#10005;</button>
+				</div>
+				<input type="search" id="snippet-search" class="snippet-search" placeholder="Search snippets&hellip;" aria-label="Search snippets">
+				<p class="snippet-hint">Click a card to add it to your code, or press &#9654; to try it instantly.</p>
+				<div id="snippet-list" class="snippet-list"></div>
+			</aside>
+
+			<div class="main-panel">
+				<div class="btn-row">
+					<button class="button" id="snippet-toggle-btn" title="Show/hide the snippet panel">&#9776; <b>SNIPPETS</b></button>
+					<button class="button" id="run-btn" title="Ctrl+Enter">&#9654; <b>RUN</b></button>
+					<button class="button" id="stop-btn" title="Ctrl+.">&#9724; <b>STOP</b></button>
+					<button class="button" id="save-btn" title="Ctrl+S">&#9660; <b>SAVE CODE</b></button>
+					<button class="button" id="rec-btn">&#9673; <b>REC</b></button>
+					<button class="button" id="stopRec-btn">&#9689; <b>STOP REC</b></button>
+					<input type="file" id="sample-btn" style="display:none" accept="audio/*">
+					<button class="button" id="load-sample-btn" onclick="document.getElementById('sample-btn').click()">
+					    &#8682; <b>ADD SAMPLE</b>
+					</button>
+					<button class="button" id="theme-btn" onclick="var b=document.body;b.classList.toggle('light');var l=b.classList.contains('light');this.innerHTML=l?'&#9790;':'&#9788;';document.querySelector('meta[name=theme-color]').content=l?'#f5f5f5':'#2d2d2d'">&#9788;</button>
+				</div>
+				<div id="editor-container" class="cm-container"></div>
+				<div class="editor-row">
+				<textarea id="ml-console" autocomplete="off" readonly class="listenc" placeholder="Machine Listening ouput will appear here..."></textarea>
+				<textarea id="console-output" autocomplete="off" readonly class="console" placeholder="Click anywhere to start litePlay."></textarea>
+				<br>
+				<label for="log-check">
+				Log: <input type="checkbox" id="log-check">
+				</label>
+				<label for="listen-check">
+				Listen: <input type="checkbox" id="listen-check">
+				</label>
+				</div>
+			</div>
 		</div>
 
 	</div>

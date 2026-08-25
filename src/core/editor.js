@@ -22,6 +22,8 @@ import {
 import { connect } from "https://esm.sh/extendable-media-recorder-wav-encoder";
 // add essentia
 import { toggleListening, stopListening } from "../listener/listener.js";
+// snippet palette
+import { SNIPPET_CATEGORIES, buildInsertion } from "./snippets.js";
 
 // override function to print output in console
 const consoleOutput = document.getElementById("console-output");
@@ -371,6 +373,112 @@ let editor = new EditorView({
   state: startState,
   parent: document.getElementById("editor-container"),
 });
+
+// snippet palette: click a card to insert ready-made, working code
+function insertSnippet(code) {
+  const doc = editor.state.doc.toString();
+  const cursorPos = editor.state.selection.main.head;
+  const { from, to, insert, cursor } = buildInsertion(doc, cursorPos, code);
+
+  editor.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: cursor },
+  });
+  editor.focus();
+
+  const editorContainer = document.getElementById("editor-container");
+  if (editorContainer) {
+    editorContainer.classList.add("snippet-flash");
+    setTimeout(() => editorContainer.classList.remove("snippet-flash"), 600);
+  }
+}
+
+function buildSnippetPalette() {
+  const list = document.getElementById("snippet-list");
+  if (!list) return;
+
+  SNIPPET_CATEGORIES.forEach((category, index) => {
+    const details = document.createElement("details");
+    details.className = "snippet-category";
+    details.dataset.categoryId = category.id;
+    if (index === 0) details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.textContent = category.title;
+    details.appendChild(summary);
+
+    category.items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "snippet-item";
+      row.dataset.searchText =
+        `${item.label} ${item.description}`.toLowerCase();
+
+      const insertBtn = document.createElement("button");
+      insertBtn.className = "snippet-insert";
+      insertBtn.title = "Insert into your code";
+      insertBtn.innerHTML =
+        `<span class="snippet-label"></span>` +
+        `<span class="snippet-desc"></span>`;
+      insertBtn.querySelector(".snippet-label").textContent = item.label;
+      insertBtn.querySelector(".snippet-desc").textContent = item.description;
+      insertBtn.addEventListener("click", () => insertSnippet(item.code));
+
+      const runBtn = document.createElement("button");
+      runBtn.className = "snippet-run";
+      runBtn.title = "Insert and run now";
+      runBtn.setAttribute("aria-label", `Insert and run: ${item.label}`);
+      runBtn.textContent = "▶";
+      runBtn.addEventListener("click", () => {
+        insertSnippet(item.code);
+        runLP();
+      });
+
+      row.appendChild(insertBtn);
+      row.appendChild(runBtn);
+      details.appendChild(row);
+    });
+
+    list.appendChild(details);
+  });
+}
+
+buildSnippetPalette();
+
+// snippet search: filter cards by label/description, auto-expanding matches
+const snippetSearch = document.getElementById("snippet-search");
+if (snippetSearch) {
+  snippetSearch.addEventListener("input", () => {
+    const query = snippetSearch.value.trim().toLowerCase();
+    const categories = document.querySelectorAll(".snippet-category");
+
+    categories.forEach((category) => {
+      let categoryHasMatch = false;
+      category.querySelectorAll(".snippet-item").forEach((row) => {
+        const matches = query === "" || row.dataset.searchText.includes(query);
+        row.classList.toggle("no-match", !matches);
+        if (matches) categoryHasMatch = true;
+      });
+      category.classList.toggle("no-match", !categoryHasMatch);
+      if (query !== "") category.open = categoryHasMatch;
+      else category.open = category.dataset.categoryId === "basics";
+    });
+  });
+}
+
+// snippet panel show/hide toggle
+const snippetPanel = document.getElementById("snippet-panel");
+const snippetToggleBtn = document.getElementById("snippet-toggle-btn");
+const snippetCloseBtn = document.getElementById("snippet-close-btn");
+if (snippetPanel && snippetToggleBtn) {
+  snippetToggleBtn.addEventListener("click", () => {
+    snippetPanel.classList.toggle("hidden");
+  });
+}
+if (snippetPanel && snippetCloseBtn) {
+  snippetCloseBtn.addEventListener("click", () => {
+    snippetPanel.classList.add("hidden");
+  });
+}
 
 // start litePlay
 let liteplayEngine = null;
