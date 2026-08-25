@@ -67,9 +67,30 @@ play(C4);
 
 ## Signal Modifiers (effects)
 
-Every instrument also supports a growing set of Csound's
-[Signal Modifiers](https://csound.com/docs/manual/SigmodTop.html) — distortion,
-filters, a compressor, tremolo, ring modulation, flanger/chorus/phaser, comb
-filtering, sample & hold, and reverb tone shaping — as plain methods like
-`piano.distortion(0.6)`. See [SIGNAL_MODIFIERS.md](SIGNAL_MODIFIERS.md) for
-the full list and usage demos.
+Every instrument also supports Csound's
+[Signal Modifiers](https://csound.com/docs/manual/SigmodTop.html) — every
+category in the Csound manual now has at least one effect wired in — as
+plain methods like `piano.distortion(0.6)`:
+
+- **Waveshaping**: `distortion()`
+- **Filters**: `highpass()`, `moogFilter()`, `combFilter()`
+- **Waveguides**: `stringResonance()`
+- **Dynamics**: `compressor()`, `tremolo()`
+- **Signal Limiters**: `limiter()`
+- **Special Effects**: `ringModulate()`, `flanger()`, `chorus()`, `phaser()`
+- **Sample Level Operators**: `sampleHold()`
+- **Convolution**: `convolve()`
+- **Reverberation**: `reverbTone()`
+
+```JavaScript
+function f() {
+	guitar.distortion(0.6);
+	guitar.flanger(0.3, 0.006, 0.7);
+	play(E2);
+}
+
+lpRun(f);
+```
+
+See [SIGNAL_MODIFIERS.md](SIGNAL_MODIFIERS.md) for the full list, every
+method's parameters, and a usage demo for each one.
