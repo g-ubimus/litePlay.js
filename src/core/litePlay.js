@@ -10,6 +10,8 @@ const srcurl = new URL("../../", import.meta.url).href;
 // CSD file name
 const csd = "src/core/litePlay.csd";
 const sfont = "assets/audio/gm.sf2";
+// bundled impulse response for the convolve() Signal Modifier
+const defaultIR = "assets/audio/ir_room.wav";
 
 // this is the JS function to start Csound
 export async function startEngine() {
@@ -27,6 +29,8 @@ export async function startEngine() {
     await csound.setOption("-M0");
     // copy the sfont file to the Csound local filesystem
     await copyUrlToLocal(srcurl + sfont, "gm.sf2");
+    // copy the bundled impulse response used by convolve()
+    await copyUrlToLocal(srcurl + defaultIR, "ir_room.wav");
     // copy the CSD file to the Csound local filesystem
     await copyUrlToLocal(srcurl + csd, csd);
     // compile csound code
@@ -65,10 +69,16 @@ const globalObj = {
 };
 // hold delay lines
 const delayLines = new Set();
+// hold per-channel Signal Modifier bus effects (flanger/chorus/phaser/comb)
+const flangerLines = new Set();
+const chorusLines = new Set();
+const phaserLines = new Set();
+const combLines = new Set();
+const convolveLines = new Set();
 
 // Csound instrument class
 export class Instrument {
-  constructor(pgm, isDrums = false, what = 60.0, instr = 10) {
+  constructor(pgm, isDrums = false, what = 60.0, instr = 10, bankOffset = 0) {
     this.pgm = pgm;
     this.chn = globalObj.freeChannel;
     globalObj.freeChannel =
@@ -81,6 +91,9 @@ export class Instrument {
     this.howLong = 1;
     this.on = new Uint8Array(128);
     this.instr = instr;
+    // which soundfont bank's presets this instrument addresses (0 = the
+    // built-in gm.sf2; see the `soundfont` export for additional banks)
+    this.bankOffset = bankOffset;
   }
 
   what(snd) {
@@ -88,10 +101,10 @@ export class Instrument {
   }
 
   score(what, howLoud, when, howLong) {
-    let prog = this.pgm;
+    let prog = this.bankOffset + this.pgm;
     let instr = this.instr + what / 1000000 + this.chn / globalObj.maxChannel;
     if (this.isDrums) {
-      if (prog == 7) csound.tableSet(26, this.chn, 2);
+      if (this.pgm == 7) csound.tableSet(26, this.chn, 2);
       else csound.tableSet(26, this.chn, 0.5);
       if (what == 29 || what == 30) instr = 10.97;
       else if (what == 42 || what == 44 || what == 46 || what == 49)
@@ -101,7 +114,10 @@ export class Instrument {
       else if (what == 78 || what == 79) instr = 10.94;
       else if (what == 80 || what == 81) instr = 10.95;
       else if (what == 86 || what == 87) instr = 10.96;
-      prog = 317 + this.pgm;
+      // "+317" is where gm.sf2's own drum kit happens to land in the
+      // sfpassign preset order; a different soundfont's percussion presets
+      // aren't guaranteed to follow the same layout (see `soundfont` below).
+      prog = this.bankOffset + 317 + this.pgm;
     }
 
     if (howLong <= 0) this.on[what] = 1;
@@ -332,6 +348,194 @@ export class Instrument {
       csound.inputMessage("i-105." + this.chn + " 0 0.1 " + this.chn);
     }
   }
+
+  // --- Signal Modifiers (Csound opcode groups exposed as litePlay effects) ---
+
+  // Waveshaping and Phase Distortion: distortion via Csound's `distort` opcode.
+  distortion(amount) {
+    csound.tableSet(34, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
+  }
+
+  // Standard Filters: high-pass via Csound's `atone` opcode.
+  highpass(cutoff) {
+    csound.tableSet(35, this.chn, cutoff < 1 ? (cutoff > 0 ? cutoff : 0) : 1);
+  }
+
+  // Specialized Filters: Moog-ladder resonant low-pass via Csound's `moogladder`.
+  moogFilter(cutoff, resonance) {
+    csound.tableSet(36, this.chn, cutoff < 1 ? (cutoff > 0 ? cutoff : 0) : 1);
+    csound.tableSet(37, this.chn, resonance > 0 ? resonance : 0);
+  }
+
+  // Amplitude Modifiers and Dynamic Processing: compressor via Csound's `dam`.
+  compressor(amount, threshold = 0.3) {
+    csound.tableSet(38, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
+    csound.tableSet(
+      39,
+      this.chn,
+      threshold < 1 ? (threshold > 0 ? threshold : 0) : 1,
+    );
+  }
+
+  // Amplitude Modifiers and Dynamic Processing: tremolo (amplitude LFO).
+  tremolo(rate, depth) {
+    csound.tableSet(40, this.chn, rate > 0 ? rate : 0);
+    csound.tableSet(41, this.chn, depth < 1 ? (depth > 0 ? depth : 0) : 1);
+  }
+
+  // Special Effects: ring modulator, distinct from the SSB frequency shift().
+  ringModulate(frequency, mix = 1) {
+    csound.tableSet(42, this.chn, frequency > 0 ? frequency : 0);
+    csound.tableSet(43, this.chn, mix < 1 ? (mix > 0 ? mix : 0) : 1);
+  }
+
+  // Sample Level Operators: lo-fi sample & hold via Csound's `samphold`.
+  sampleHold(rate, mix = 1) {
+    csound.tableSet(44, this.chn, rate > 1 ? rate : 1);
+    csound.tableSet(45, this.chn, mix < 1 ? (mix > 0 ? mix : 0) : 1);
+  }
+
+  // Special Effects: flanger, a per-channel bus effect via Csound's `flanger`.
+  flanger(rate, depth, feedback = 0) {
+    const r = Number.isFinite(rate) ? rate : 0;
+    const d = Number.isFinite(depth) ? depth : 0;
+    const fb = Number.isFinite(feedback) ? feedback : 0;
+    if (r <= 0 && d <= 0 && fb === 0) {
+      this.noFlanger();
+      return;
+    }
+    csound.tableSet(46, this.chn, r > 0 ? r : 0.5);
+    csound.tableSet(47, this.chn, Math.min(Math.max(d, 0), 0.015));
+    csound.tableSet(48, this.chn, Math.min(Math.max(fb, -0.95), 0.95));
+    csound.tableSet(59, this.chn, 1);
+    if (!flangerLines.has(this.chn)) {
+      flangerLines.add(this.chn);
+      csound.inputMessage("i106." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noFlanger() {
+    csound.tableSet(59, this.chn, 0);
+    if (flangerLines.delete(this.chn)) {
+      csound.inputMessage("i-106." + this.chn + " 0 0.1 " + this.chn);
+    }
+  }
+
+  // Special Effects: chorus, a per-channel bus effect (a longer, feedback-free
+  // relative of flanger()) via Csound's `flanger` opcode.
+  chorus(rate, depth) {
+    const r = Number.isFinite(rate) ? rate : 0;
+    const d = Number.isFinite(depth) ? depth : 0;
+    if (r <= 0 && d <= 0) {
+      this.noChorus();
+      return;
+    }
+    csound.tableSet(49, this.chn, r > 0 ? r : 0.25);
+    csound.tableSet(50, this.chn, Math.min(Math.max(d, 0), 0.025));
+    csound.tableSet(60, this.chn, 1);
+    if (!chorusLines.has(this.chn)) {
+      chorusLines.add(this.chn);
+      csound.inputMessage("i107." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noChorus() {
+    csound.tableSet(60, this.chn, 0);
+    if (chorusLines.delete(this.chn)) {
+      csound.inputMessage("i-107." + this.chn + " 0 0.1 " + this.chn);
+    }
+  }
+
+  // Special Effects: phaser, a per-channel bus effect via Csound's `phaser1`.
+  phaser(rate, stages = 4, feedback = 0.7) {
+    const r = Number.isFinite(rate) ? rate : 0;
+    const st = Number.isFinite(stages) ? stages : 4;
+    const fb = Number.isFinite(feedback) ? feedback : 0.7;
+    if (r <= 0) {
+      this.noPhaser();
+      return;
+    }
+    csound.tableSet(51, this.chn, r);
+    csound.tableSet(52, this.chn, Math.min(Math.max(Math.round(st), 1), 4999));
+    csound.tableSet(53, this.chn, Math.min(Math.max(fb, -0.99), 0.99));
+    csound.tableSet(61, this.chn, 1);
+    if (!phaserLines.has(this.chn)) {
+      phaserLines.add(this.chn);
+      csound.inputMessage("i108." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noPhaser() {
+    csound.tableSet(61, this.chn, 0);
+    if (phaserLines.delete(this.chn)) {
+      csound.inputMessage("i-108." + this.chn + " 0 0.1 " + this.chn);
+    }
+  }
+
+  // Specialized Filters: resonant comb filter, a per-channel bus effect via
+  // Csound's `comb` opcode.
+  combFilter(decay, delayTime = 0.01) {
+    const dc = Number.isFinite(decay) ? decay : 0;
+    const dt = Number.isFinite(delayTime) ? delayTime : 0.01;
+    if (dc <= 0) {
+      this.noCombFilter();
+      return;
+    }
+    csound.tableSet(54, this.chn, dc);
+    csound.tableSet(55, this.chn, dt > 0 ? dt : 0.01);
+    csound.tableSet(62, this.chn, 1);
+    if (!combLines.has(this.chn)) {
+      combLines.add(this.chn);
+      csound.inputMessage("i109." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noCombFilter() {
+    csound.tableSet(62, this.chn, 0);
+    if (combLines.delete(this.chn)) {
+      csound.inputMessage("i-109." + this.chn + " 0 0.1 " + this.chn);
+    }
+  }
+
+  // Convolution and Morphing: real impulse-response convolution via Csound's
+  // `pconvolve`, a per-channel bus effect reading the bundled "ir_room.wav".
+  convolve(amount) {
+    const a = Number.isFinite(amount) ? amount : 0;
+    if (a <= 0) {
+      this.noConvolve();
+      return;
+    }
+    csound.tableSet(63, this.chn, a < 1 ? a : 1);
+    if (!convolveLines.has(this.chn)) {
+      convolveLines.add(this.chn);
+      csound.inputMessage("i111." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
+
+  noConvolve() {
+    csound.tableSet(63, this.chn, 0);
+    if (convolveLines.delete(this.chn)) {
+      csound.inputMessage("i-111." + this.chn + " 0 0.1 " + this.chn);
+    }
+  }
+
+  // Signal Limiters: a hard-ceiling limiter via Csound's `clip`.
+  limiter(ceiling) {
+    csound.tableSet(
+      64,
+      this.chn,
+      ceiling < 1 ? (ceiling > 0.05 ? ceiling : 0.05) : 1,
+    );
+  }
+
+  // Waveguides: string/sympathetic resonance via Csound's `streson`, treating
+  // the instrument's own sound as the "excitation" of a resonant string.
+  stringResonance(frequency, feedback = 0.9, mix = 1) {
+    const fb = Number.isFinite(feedback) ? feedback : 0.9;
+    csound.tableSet(65, this.chn, frequency > 0 ? frequency : 440);
+    csound.tableSet(66, this.chn, Math.min(Math.max(fb, -0.99), 0.99));
+    csound.tableSet(67, this.chn, mix < 1 ? (mix > 0 ? mix : 0) : 1);
+  }
 }
 
 export const sample = {
@@ -384,6 +588,31 @@ export class Sampler extends Instrument {
   }
 }
 
+// A second, independently-addressable soundfont bank, loaded on demand at
+// runtime (see instr 3 in litePlay.csd) rather than bundled with litePlay -
+// point this at any .sf2 file you have the rights to use. Its presets land
+// at preset index 1000+, so they never collide with the built-in gm.sf2
+// bank; instrument(pgm) hands back a regular Instrument bound to that
+// offset, so everything else (play(), effects, the sequencer...) works
+// exactly like any other litePlay instrument. Percussion-kit mapping (the
+// "+317" used for gm.sf2's own drum kits) is specific to gm.sf2's internal
+// preset layout, so isDrums here is left to the caller to opt into
+// deliberately rather than assumed.
+export const soundfont = {
+  offset: 1000,
+  loaded: false,
+  load: function (url) {
+    return copyUrlToLocal(url, "localsf.sf2").then(() => {
+      csound.inputMessage('i3 0 0.1 "localsf.sf2"');
+      this.loaded = true;
+      return this;
+    });
+  },
+  instrument: function (pgm, isDrums = false, what = 60.0) {
+    return new Instrument(pgm, isDrums, what, 10, this.offset);
+  },
+};
+
 // resolve an instrument or sample object into an Instrument
 function toInstr(instr) {
   if (instr instanceof Instrument) return instr;
@@ -421,6 +650,13 @@ export function setBpm(bpm) {
 // returns beats per minute
 export function getBpm() {
   return globalObj.BPM;
+}
+
+// Reverberation: global reverb tone shaping via freeverb's kRoomSize/kHFDamp,
+// shared by every instrument since reverb is a single mixed bus, not per-channel.
+export function reverbTone(size = 0.7, damping = 0.35) {
+  csound.tableSet(57, 0, size < 1 ? (size > 0 ? size : 0) : 1);
+  csound.tableSet(58, 0, damping < 1 ? (damping > 0 ? damping : 0) : 1);
 }
 
 // current audio clock time
@@ -838,6 +1074,11 @@ export async function reset() {
     sequencer.stop();
     await csound.inputMessage("i 200 0 0.1");
     delayLines.clear();
+    flangerLines.clear();
+    chorusLines.clear();
+    phaserLines.clear();
+    combLines.clear();
+    convolveLines.clear();
   } else {
     console.log("No Csound instance found!");
   }

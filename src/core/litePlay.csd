@@ -8,6 +8,14 @@ nchnls_i = 1
 ksmps = 64
 0dbfs = 1
 sr = 44100
+/* topmost cf: maps a normalised 0-1 cutoff onto Hz for the exponential
+filter-cutoff mappings below (vclpf-based lowpass, plus the new HighPass and
+MoogFilter Signal Modifiers). Must be defined here, before first use, since
+Csound's compiler resolves a global variable's rate/value in file order -
+referencing it from an opcode defined earlier in the file (even though the
+opcode itself is only CALLED later, at performance time) still fails to
+compile with "Variable 'gicf' used before defined". */
+gicf = log(sr/2)
 
 ichn = 1
 lp1: massign   ichn, 0
@@ -28,6 +36,15 @@ garev2 init 0
 //delay
 gadel[] init 100
 
+//flanger / chorus / phaser / comb-filter sends (per-channel bus effects)
+gaflange[] init 100
+gachorus[] init 100
+gaphaser[] init 100
+gacomb[] init 100
+
+//convolution reverb send (per-channel bus effect)
+gaconv[] init 100
+
 //freq shift
 opcode Shift, aa, aak
 	ain1, ain2, kval xin
@@ -37,6 +54,154 @@ opcode Shift, aa, aak
 	acos oscili 1, kval, 29, .25
 	aout1 = (areal1*acos - aimag1*asin)
 	aout2 = (areal2*acos - aimag2*asin)
+	xout aout1, aout2
+endop
+
+//--- Signal Modifiers (Csound opcode groups exposed as litePlay effects) ---
+//note: the topmost-cf constant used below to map a normalised 0-1 cutoff onto
+//Hz is `gicf`, the SAME constant the existing vclpf-based filter uses,
+//defined once at the very top of the file (see the note there).
+
+//Waveshaping and Phase Distortion: distortion via the `distort` opcode.
+//table 34: drive (0-1, 0 = exact bypass, crossfaded here rather than relying
+//on distort's own near-linear-at-0 behaviour, which the docs do not guarantee bit-exact)
+opcode Distort, aa, aak
+	ain1, ain2, kchn xin
+	kdrive table kchn, 34
+	ad1 distort ain1, kdrive, 56
+	ad2 distort ain2, kdrive, 56
+	aout1 = ain1*(1-kdrive) + ad1*kdrive
+	aout2 = ain2*(1-kdrive) + ad2*kdrive
+	xout aout1, aout2
+endop
+
+//Standard Filters: high-pass via `atone` (the complement of the existing vclpf low-pass).
+//table 35: cutoff (0-1, 0 = transparent/off, 1 = brightest highpass)
+opcode HighPass, aa, aak
+	ain1, ain2, kchn xin
+	kcut table kchn, 35
+	khp = kcut > 0 ? exp((kcut < 1 ? kcut : 1)*gicf) : 1
+	ah1 atone ain1, khp
+	ah2 atone ain2, khp
+	aout1 = kcut > 0 ? ah1 : ain1
+	aout2 = kcut > 0 ? ah2 : ain2
+	xout aout1, aout2
+endop
+
+//Specialized Filters: Moog-ladder resonant low-pass via `moogladder`, a second filter
+//character alongside the existing vclpf-based cutoff()/resonance(). moogladder's
+//ladder stages always run their signal through a soft (tanh) saturation, so
+//there is no literal bypass; the cutoff ceiling below is kept a little under
+//Nyquist (rather than exactly at it) so that saturation's own harmonics still
+//have some headroom to roll off instead of aliasing right back into the band.
+//table 36: cutoff (0-1, default 1 = wide open); table 37: resonance (0-4, default 0)
+opcode MoogFilter, aa, aak
+	ain1, ain2, kchn xin
+	kcut table kchn, 36
+	kres table kchn, 37
+	kcut = kcut < 0.95 ? kcut : 0.95
+	kres = kres < 4 ? (kres > 0 ? kres : 0) : 4
+	kcf = exp(kcut*gicf)
+	am1 moogladder ain1, kcf, kres
+	am2 moogladder ain2, kcf, kres
+	xout am1, am2
+endop
+
+//Amplitude Modifiers and Dynamic Processing: compressor via `dam`.
+//table 38: amount (0-1, 0 = exact bypass via irtime=iftime=0); table 39: threshold (0-1)
+opcode Compressor, aa, aak
+	ain1, ain2, kchn xin
+	kamt table kchn, 38
+	kthresh table kchn, 39
+	iamt = i(kamt)
+	iratio = 1 - iamt*0.85
+	iratio = iratio > 0.05 ? (iratio < 1 ? iratio : 1) : 0.05
+	iratt = iamt > 0 ? 0.03 : 0
+	irel = iamt > 0 ? 0.25 : 0
+	ac1 dam ain1, kthresh, iratio, 1, iratt, irel
+	ac2 dam ain2, kthresh, iratio, 1, iratt, irel
+	xout ac1, ac2
+endop
+
+//Amplitude Modifiers and Dynamic Processing: tremolo (amplitude LFO).
+//table 40: rate in Hz; table 41: depth (0-1, 0 = exact bypass)
+opcode Tremolo, aa, aak
+	ain1, ain2, kchn xin
+	krate table kchn, 40
+	kdepth table kchn, 41
+	klfo oscili kdepth, krate, 33
+	kenv = 1 - kdepth*0.5 + klfo
+	xout ain1*kenv, ain2*kenv
+endop
+
+//Special Effects: ring modulator (amplitude multiplication by a sine carrier),
+//distinct from the existing SSB frequency Shift above.
+//table 42: carrier frequency in Hz; table 43: mix (0-1, 0 = exact bypass)
+opcode RingMod, aa, aak
+	ain1, ain2, kchn xin
+	kfreq table kchn, 42
+	kmix table kchn, 43
+	kcar oscili 1, kfreq, 33
+	ar1 = ain1*kcar
+	ar2 = ain2*kcar
+	aout1 = ain1*(1-kmix) + ar1*kmix
+	aout2 = ain2*(1-kmix) + ar2*kmix
+	xout aout1, aout2
+endop
+
+//Sample Level Operators: lo-fi sample & hold via `samphold` + `mpulse`.
+//table 44: rate in Hz; table 45: mix (0-1, 0 = exact bypass)
+opcode SampleHold, aa, aak
+	ain1, ain2, kchn xin
+	krate table kchn, 44
+	kmix table kchn, 45
+	agate mpulse 1, 1/(krate > 1 ? krate : 1)
+	ah1 samphold ain1, agate
+	ah2 samphold ain2, agate
+	aout1 = ain1*(1-kmix) + ah1*kmix
+	aout2 = ain2*(1-kmix) + ah2*kmix
+	xout aout1, aout2
+endop
+
+//Signal Limiters: a hard-ceiling limiter via `clip` (imeth=0/Bram de Jong,
+//the same method litePlay's own master bus already uses, but with iarg=1
+//so the curve collapses to an exact hard clip at the ceiling rather than
+//the soft asymptotic knee - a simpler, more predictable "ceiling" control).
+//imeth/ilimit/iarg are i-rate only in Csound (fixed for the note's life), so
+//the ceiling is read once at note-init via i(kchn), matching the existing
+//i-rate table-read pattern used for envelope times elsewhere in this file.
+//table 64: ceiling (0.05-1, default 1 = effectively no limiting for typical
+//signal levels, since normal output already stays under 1)
+opcode Limiter, aa, aak
+	ain1, ain2, kchn xin
+	ichn = i(kchn)
+	iceil table ichn, 64
+	iceil = iceil > 0.05 ? (iceil <= 1 ? iceil : 1) : 0.05
+	al1 clip ain1, 0, iceil, 1
+	al2 clip ain2, 0, iceil, 1
+	xout al1, al2
+endop
+
+//Waveguides: string/sympathetic resonance via `streson` (a comb/lowpass/
+//allpass network similar to Karplus-Strong, treating the existing synth
+//signal as an "excitation" rather than modelling a whole instrument from
+//scratch - this is what lets a waveguide-family opcode fit into litePlay's
+//note-triggered signal chain as a Signal Modifier rather than a full
+//physical-modelling instrument).
+//table 65: frequency in Hz; table 66: feedback (-0.99 to 0.99, clamped away
+//from +-1 so the resonance is always guaranteed to decay); table 67: mix
+//(0-1, 0 = exact bypass - streson's own kfdbgain=0 is only an approximate,
+//not guaranteed exact, bypass per the Csound manual, hence the crossfade)
+opcode StringResonance, aa, aak
+	ain1, ain2, kchn xin
+	kfreq table kchn, 65
+	kfb table kchn, 66
+	kmix table kchn, 67
+	kfb = kfb > 0.99 ? 0.99 : (kfb < -0.99 ? -0.99 : kfb)
+	as1 streson ain1, kfreq, kfb
+	as2 streson ain2, kfreq, kfb
+	aout1 = ain1*(1-kmix) + as1*kmix
+	aout2 = ain2*(1-kmix) + as2*kmix
 	xout aout1, aout2
 endop
 
@@ -148,8 +313,6 @@ nxt:
   endif
 endin
 
-/* topmost cf */
-gicf = log(sr/2)
 /* this is the GM soundfont synthesizer instrument */
 instr 10
 	iatt table p7,23
@@ -177,10 +340,20 @@ instr 10
 	a1 = a1f
 	a2 = a2f
 	//frequency shifter
-	kshift table p7,28 
+	kshift table p7,28
 	a1, a2 Shift a1, a2, kshift
+	//signal modifiers
+	a1, a2 Distort a1, a2, p7
+	a1, a2 HighPass a1, a2, p7
+	a1, a2 MoogFilter a1, a2, p7
+	a1, a2 Compressor a1, a2, p7
+	a1, a2 Tremolo a1, a2, p7
+	a1, a2 RingMod a1, a2, p7
+	a1, a2 SampleHold a1, a2, p7
+	a1, a2 StringResonance a1, a2, p7
+	a1, a2 Limiter a1, a2, p7
 	//panning
-	kvol tablei kv, 5 
+	kvol tablei kv, 5
 	kpan  table p7, 3
 	krate table p7, 32
 	kbase = (kpan - 64)/128
@@ -188,10 +361,43 @@ instr 10
 	kpan  = kbase + klfo
 	a1 *= kvol*(0.5-kpan/2)
 	a2 *= kvol*(0.5+kpan/2)
-	//send to delay 
-	gadel[p7] = gadel[p7] + a1
-	gadel[p7] = gadel[p7] + a2
-	//send to reverb 
+	//send to delay (gated on kdt so an inactive channel's bus never accumulates)
+	kdt table p7,30
+	if kdt > 0 then
+		gadel[p7] = gadel[p7] + a1
+		gadel[p7] = gadel[p7] + a2
+	endif
+	//send to flanger / chorus / phaser / comb-filter (each gated on its own
+	//active-flag table so a channel that never enables an effect never
+	//accumulates into that effect's bus)
+	kflon table p7, 59
+	if kflon > 0 then
+		gaflange[p7] = gaflange[p7] + a1
+		gaflange[p7] = gaflange[p7] + a2
+	endif
+	kchon table p7, 60
+	if kchon > 0 then
+		gachorus[p7] = gachorus[p7] + a1
+		gachorus[p7] = gachorus[p7] + a2
+	endif
+	kphon table p7, 61
+	if kphon > 0 then
+		gaphaser[p7] = gaphaser[p7] + a1
+		gaphaser[p7] = gaphaser[p7] + a2
+	endif
+	kcbon table p7, 62
+	if kcbon > 0 then
+		gacomb[p7] = gacomb[p7] + a1
+		gacomb[p7] = gacomb[p7] + a2
+	endif
+	//send to convolution reverb (gated on kconv, same "amount>0" convention
+	//already used for the delay send and the existing reverb send below)
+	kconv table p7, 63
+	if kconv > 0 then
+		gaconv[p7] = gaconv[p7] + a1*kconv
+		gaconv[p7] = gaconv[p7] + a2*kconv
+	endif
+	//send to reverb
 	krev table p7,8
 	garev1 += a1*krev
 	garev2 += a2*krev
@@ -303,18 +509,62 @@ instr 12
 	a2 = a2f
 
 	kshift table p7,28 //frequency shifter
-	a1, a2 Shift a1, a2, kshift 
+	a1, a2 Shift a1, a2, kshift
+
+	//signal modifiers
+	a1, a2 Distort a1, a2, p7
+	a1, a2 HighPass a1, a2, p7
+	a1, a2 MoogFilter a1, a2, p7
+	a1, a2 Compressor a1, a2, p7
+	a1, a2 Tremolo a1, a2, p7
+	a1, a2 RingMod a1, a2, p7
+	a1, a2 SampleHold a1, a2, p7
+	a1, a2 StringResonance a1, a2, p7
+	a1, a2 Limiter a1, a2, p7
 
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
-	//send to delay 
-	gadel[p7] = gadel[p7] + a1
-	gadel[p7] = gadel[p7] + a2
+	//send to delay (gated on kdt so an inactive channel's bus never accumulates)
+	kdt table p7,30
+	if kdt > 0 then
+		gadel[p7] = gadel[p7] + a1
+		gadel[p7] = gadel[p7] + a2
+	endif
+	//send to flanger / chorus / phaser / comb-filter (each gated on its own
+	//active-flag table so a channel that never enables an effect never
+	//accumulates into that effect's bus)
+	kflon table p7, 59
+	if kflon > 0 then
+		gaflange[p7] = gaflange[p7] + a1
+		gaflange[p7] = gaflange[p7] + a2
+	endif
+	kchon table p7, 60
+	if kchon > 0 then
+		gachorus[p7] = gachorus[p7] + a1
+		gachorus[p7] = gachorus[p7] + a2
+	endif
+	kphon table p7, 61
+	if kphon > 0 then
+		gaphaser[p7] = gaphaser[p7] + a1
+		gaphaser[p7] = gaphaser[p7] + a2
+	endif
+	kcbon table p7, 62
+	if kcbon > 0 then
+		gacomb[p7] = gacomb[p7] + a1
+		gacomb[p7] = gacomb[p7] + a2
+	endif
+	//send to convolution reverb (gated on kconv, same "amount>0" convention
+	//already used for the delay send and the existing reverb send below)
+	kconv table p7, 63
+	if kconv > 0 then
+		gaconv[p7] = gaconv[p7] + a1*kconv
+		gaconv[p7] = gaconv[p7] + a2*kconv
+	endif
 	//send to reverb
 	krev table p7,8
 	garev1 += a1*krev
 	garev2 += a2*krev
-	
+
 	//send to master
 	gaLeft = gaLeft + (a1*.2)
 	gaRight = gaRight + (a2*.2)
@@ -335,9 +585,25 @@ tablew ign,p6,9
 tablew p5,p6,10
 endin
 
+// loading a second soundfont bank (mirrors instr 2's dynamic sample
+// loading above). p4 is a filename already materialized in the WASM
+// filesystem; its presets land at preset index 1000+, comfortably clear of
+// the built-in gm.sf2 bank's own used range (melodic 0-127, drum kit
+// 317-444), so both banks stay addressable through the same sfplay call in
+// instr 10 via one global preset index (see Instrument's bankOffset in
+// litePlay.js).
+// i3 0 0 "soundfont.sf2"
+instr 3
+Sfile = p4
+gisf2 sfload Sfile
+sfpassign 1000, gisf2
+endin
+
 // reverb
 instr 100
-	a1, a2 freeverb garev1, garev2, 0.7, 0.35
+	ksize table 0, 57
+	kdamp table 0, 58
+	a1, a2 freeverb garev1, garev2, ksize, kdamp, sr
 
 	//send to master
 	gaLeft = gaLeft + a1
@@ -361,6 +627,90 @@ instr 105
 	endif
 endin
 
+// flanger (Special Effects: modulated short delay + feedback, via `flanger`)
+// table 47 already stores the depth in seconds (JS clamps it to 0-0.015s), so
+// it is used directly here; imaxd (0.04) leaves headroom above the max
+// possible instantaneous delay (2*0.015 = 0.03s).
+instr 106
+	krate table p4, 46
+	kdepth table p4, 47
+	kfb table p4, 48
+	adepth = kdepth
+	adel oscili adepth, krate, 33
+	adel = adepth + adel
+	ain = gaflange[p4]
+	afl flanger ain, adel, kfb, 0.04
+	gaflange[p4] = 0
+	gaLeft = gaLeft + afl
+	gaRight = gaRight + afl
+endin
+
+// chorus (Special Effects: modulated delay w/ no feedback, longer range than
+// flanger). table 50 stores depth in seconds (JS clamps to 0-0.025s); imaxd
+// (0.06) leaves headroom above the max possible delay (2*0.025 = 0.05s).
+instr 107
+	krate table p4, 49
+	kdepth table p4, 50
+	adepth = kdepth
+	adel oscili adepth, krate, 33
+	adel = adepth + adel
+	ain = gachorus[p4]
+	ach flanger ain, adel, 0, 0.06
+	gachorus[p4] = 0
+	gaLeft = gaLeft + ach
+	gaRight = gaRight + ach
+endin
+
+// phaser (Special Effects: allpass chain sweep, via `phaser1`). iord is
+// clamped defensively even though the JS side already keeps it in 1-4999,
+// since phaser1 allocates its internal buffer from this value at init and an
+// out-of-range value here would be a much worse failure than a clamp.
+instr 108
+	kfreq table p4, 51
+	iord table p4, 52
+	kfb table p4, 53
+	iord = iord >= 1 ? (iord <= 4999 ? iord : 4999) : 1
+	ain = gaphaser[p4]
+	aph phaser1 ain, kfreq, iord, kfb
+	gaphaser[p4] = 0
+	aout = (ain + aph)*0.5
+	gaLeft = gaLeft + aout
+	gaRight = gaRight + aout
+endin
+
+// comb filter (Specialized Filters: resonant feedback comb, via `comb`).
+// krvt/ilpt are floored defensively (again, on top of the JS-side guard):
+// comb's own coefficient math only protects krvt from the low side, and
+// ilpt<=0 fails the opcode's init outright ("illegal loop time"), which would
+// silence this bus for the rest of the session.
+instr 109
+	krvt table p4, 54
+	ilpt table p4, 55
+	krvt = krvt > 0.001 ? krvt : 0.001
+	ilpt = ilpt > 0.001 ? ilpt : 0.001
+	ain = gacomb[p4]
+	acb comb ain, krvt, ilpt
+	gacomb[p4] = 0
+	gaLeft = gaLeft + acb
+	gaRight = gaRight + acb
+endin
+
+// convolution reverb (Convolution and Morphing: real impulse-response
+// convolution via `pconvolve`, reading directly from the bundled synthetic
+// impulse response "ir_room.wav" loaded into Csound's virtual filesystem at
+// engine startup - see startEngine() in litePlay.js). ipartitionsize (1024)
+// trades a little added latency for a real-time-safe CPU cost; the IR is
+// mono, so pconvolve returns a single wet channel that gets mixed equally
+// into both outputs, matching how the other per-channel bus effects above
+// fold L+R into one send and reinject the wet result symmetrically.
+instr 111
+	ain = gaconv[p4]
+	awet pconvolve ain, "ir_room.wav", 1024
+	gaconv[p4] = 0
+	gaLeft = gaLeft + awet
+	gaRight = gaRight + awet
+endin
+
 // master output
 instr 110
 	a1 clip gaLeft, 0, .99
@@ -382,13 +732,23 @@ instr 200
 	turnoff2 1, 0, 0
 	turnoff2 100, 0, 0
 	turnoff2 105, 0, 0
+	turnoff2 106, 0, 0
+	turnoff2 107, 0, 0
+	turnoff2 108, 0, 0
+	turnoff2 109, 0, 0
+	turnoff2 111, 0, 0
 	turnoff2 110, 0, 0
-	
+
 	turnoff3 10
 	turnoff3 12
 	turnoff3 1
 	turnoff3 100
 	turnoff3 105
+	turnoff3 106
+	turnoff3 107
+	turnoff3 108
+	turnoff3 109
+	turnoff3 111
 	turnoff3 110
 	schedule(300, .1, 1)
 	turnoff
@@ -458,6 +818,42 @@ f30 0 1024 7 0 1024 0  /* delay time */
 f31 0 1024 7 0 1024 0  /* delay feedback */
 f32 0 1024 -7 0 1024 0  /* auto-pan rate (Hz) per channel */
 f33 0 4096 10 1  /* sine wave for auto-pan LFO */
+
+/* --- Signal Modifiers tables --- */
+f34 0 1024 -7 0 1024 0  /* distortion drive (0 = off) */
+f35 0 1024 -7 0 1024 0  /* highpass cutoff (0 = off) */
+f36 0 1024 -7 1 1024 1  /* moog filter cutoff (1 = wide open) */
+f37 0 1024 -7 0 1024 0  /* moog filter resonance */
+f38 0 1024 -7 0 1024 0  /* compressor amount (0 = off) */
+f39 0 1024 -7 0.3 1024 0.3  /* compressor threshold */
+f40 0 1024 -7 5 1024 5  /* tremolo rate (Hz) */
+f41 0 1024 -7 0 1024 0  /* tremolo depth (0 = off) */
+f42 0 1024 -7 200 1024 200  /* ring modulator frequency (Hz) */
+f43 0 1024 -7 0 1024 0  /* ring modulator mix (0 = off) */
+f44 0 1024 -7 20 1024 20  /* sample & hold rate (Hz) */
+f45 0 1024 -7 0 1024 0  /* sample & hold mix (0 = off) */
+f46 0 1024 -7 0.5 1024 0.5  /* flanger rate (Hz) */
+f47 0 1024 -7 0 1024 0  /* flanger depth in seconds (JS clamps to 0-0.015) */
+f48 0 1024 -7 0 1024 0  /* flanger feedback */
+f49 0 1024 -7 0.25 1024 0.25  /* chorus rate (Hz) */
+f50 0 1024 -7 0 1024 0  /* chorus depth in seconds (JS clamps to 0-0.025) */
+f51 0 1024 -7 400 1024 400  /* phaser rate (Hz) */
+f52 0 1024 -7 4 1024 4  /* phaser stages */
+f53 0 1024 -7 0 1024 0  /* phaser feedback */
+f54 0 1024 -7 0 1024 0  /* comb filter decay time (s) */
+f55 0 1024 -7 0.01 1024 0.01  /* comb filter loop time (s) */
+f56 0 257 9 .5 1 270  /* distortion waveshaping table (GEN09, per the distort/GEN09 manual example) */
+f57 0 2 -2 0.7  /* reverb size (global, matches the previous hardcoded default) */
+f58 0 2 -2 0.35  /* reverb damping (global, matches the previous hardcoded default) */
+f59 0 1024 -7 0 1024 0  /* flanger active flag (0/1) */
+f60 0 1024 -7 0 1024 0  /* chorus active flag (0/1) */
+f61 0 1024 -7 0 1024 0  /* phaser active flag (0/1) */
+f62 0 1024 -7 0 1024 0  /* comb filter active flag (0/1) */
+f63 0 1024 -7 0 1024 0  /* convolution reverb send amount (0 = off) */
+f64 0 1024 -7 1 1024 1  /* limiter ceiling (1 = effectively off) */
+f65 0 1024 -7 440 1024 440  /* string resonance frequency (Hz) */
+f66 0 1024 -7 0.9 1024 0.9  /* string resonance feedback */
+f67 0 1024 -7 0 1024 0  /* string resonance mix (0 = off) */
 
 i 1 0 z
 i 100 0 z

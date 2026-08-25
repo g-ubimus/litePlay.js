@@ -140,6 +140,44 @@ describe('Instrument', () => {
     expect(score).toMatch(/^i/);
     expect(score).toContain('60');
   });
+
+  it('defaults bankOffset to 0, using the raw program number as the preset index', () => {
+    const instr = new litePlay.Instrument(5);
+    const fields = instr.score(60, 0.5, 0, 1).trim().split(' ');
+    expect(fields[5]).toBe('5');
+  });
+
+  it('bankOffset shifts the preset index used in the score line', () => {
+    const instr = new litePlay.Instrument(5, false, 60, 10, 1000);
+    const fields = instr.score(60, 0.5, 0, 1).trim().split(' ');
+    expect(fields[5]).toBe('1005');
+  });
+
+  // Note: a drum Instrument's score() path calls csound.tableSet(), which
+  // needs a real (or mocked) Csound engine - not exercised here, matching
+  // the rest of this suite (no existing test calls score() with isDrums
+  // true either).
+});
+
+describe('soundfont', () => {
+  it('defaults to preset-index offset 1000 and starts unloaded', () => {
+    expect(litePlay.soundfont.offset).toBe(1000);
+    expect(litePlay.soundfont.loaded).toBe(false);
+  });
+
+  it('instrument() returns an Instrument bound to the bank offset', () => {
+    const instr = litePlay.soundfont.instrument(0);
+    expect(instr).toBeInstanceOf(litePlay.Instrument);
+    expect(instr.pgm).toBe(0);
+    expect(instr.isDrums).toBe(false);
+    expect(instr.bankOffset).toBe(litePlay.soundfont.offset);
+  });
+
+  it('instrument() forwards isDrums and what', () => {
+    const instr = litePlay.soundfont.instrument(2, true, 40);
+    expect(instr.isDrums).toBe(true);
+    expect(instr.what_).toBe(40);
+  });
 });
 
 describe('audioClock', () => {
