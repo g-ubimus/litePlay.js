@@ -64,3 +64,12 @@ npx serve
 ```JavaScript
 play(C4);
 ```
+
+## Signal Modifiers (effects)
+
+Every instrument also supports a growing set of Csound's
+[Signal Modifiers](https://csound.com/docs/manual/SigmodTop.html) — distortion,
+filters, a compressor, tremolo, ring modulation, flanger/chorus/phaser, comb
+filtering, sample & hold, and reverb tone shaping — as plain methods like
+`piano.distortion(0.6)`. See [SIGNAL_MODIFIERS.md](SIGNAL_MODIFIERS.md) for
+the full list and usage demos.
