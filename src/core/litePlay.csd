@@ -8,6 +8,14 @@ nchnls_i = 1
 ksmps = 64
 0dbfs = 1
 sr = 44100
+/* topmost cf: maps a normalised 0-1 cutoff onto Hz for the exponential
+filter-cutoff mappings below (vclpf-based lowpass, plus the new HighPass and
+MoogFilter Signal Modifiers). Must be defined here, before first use, since
+Csound's compiler resolves a global variable's rate/value in file order -
+referencing it from an opcode defined earlier in the file (even though the
+opcode itself is only CALLED later, at performance time) still fails to
+compile with "Variable 'gicf' used before defined". */
+gicf = log(sr/2)
 
 ichn = 1
 lp1: massign   ichn, 0
@@ -48,8 +56,8 @@ endop
 
 //--- Signal Modifiers (Csound opcode groups exposed as litePlay effects) ---
 //note: the topmost-cf constant used below to map a normalised 0-1 cutoff onto
-//Hz is `gicf`, the SAME constant the existing vclpf-based filter uses
-//(defined once, further down, right before instr 10 - see the note there).
+//Hz is `gicf`, the SAME constant the existing vclpf-based filter uses,
+//defined once at the very top of the file (see the note there).
 
 //Waveshaping and Phase Distortion: distortion via the `distort` opcode.
 //table 34: drive (0-1, 0 = exact bypass, crossfaded here rather than relying
@@ -260,8 +268,6 @@ nxt:
   endif
 endin
 
-/* topmost cf */
-gicf = log(sr/2)
 /* this is the GM soundfont synthesizer instrument */
 instr 10
 	iatt table p7,23
