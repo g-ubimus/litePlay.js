@@ -1,7 +1,9 @@
 *.wav filter=lfs diff=lfs merge=lfs -text
 *.sf2 filter=lfs diff=lfs merge=lfs -text
 
-# GitHub blocks pushing new LFS objects through a public fork, so this small
-# (181KB) bundled asset is committed as a regular blob instead - LFS stays on
-# for any future large audio asset added with direct push access.
+# GitHub blocks pushing new LFS objects through a public fork, so these
+# bundled assets are committed as regular blobs instead - LFS stays on for
+# any future large audio asset added with direct push access.
 assets/audio/ir_room.wav filter= diff= merge= -text
+assets/audio/gm.sf2 filter= diff= merge= -text
+assets/audio/pianoc2.wav filter= diff= merge= -text
