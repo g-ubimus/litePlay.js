@@ -1498,6 +1498,8 @@ sequenciador.ativarPausa = sequencer.togglePause;
 sequenciador.ativarMudo = sequencer.toggleMute;
 sequenciador.ativarSolo = sequencer.toggleSolo;
 
+export const defineBpm = setBpm;
+
 export const algum = any;
 export const toque = play;
 export const pare = stop;
