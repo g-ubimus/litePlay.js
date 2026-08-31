@@ -398,7 +398,6 @@ endin
 instr 300
 	schedule(1, 0, -1)
 	schedule(100, 0, -1)
-	schedule(105, 0, -1)
 	schedule(110, 0, -1)
 endin
 
