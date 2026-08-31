@@ -270,7 +270,7 @@ export class Instrument {
 
   pan(amount) {
     if (amount) {
-	this.autoPan(0);
+      this.autoPan(0);
     }
     csound.tableSet(
       3,
@@ -288,11 +288,7 @@ export class Instrument {
   }
 
   autoPan(hertz) {
-    csound.tableSet(
-      32,
-      this.chn,
-      hertz > 0 ? 1 / hertz : 0,
-    );
+    csound.tableSet(32, this.chn, hertz > 0 ? 1 / hertz : 0);
   }
 
   filterEnvelope(amount, att, dec, sus, rel) {
@@ -1486,6 +1482,7 @@ Instrument.prototype.panAutomático = Instrument.prototype.autoPan;
 export const listaEventos = eventList;
 eventList.toque = eventList.play;
 eventList.criar = eventList.create;
+eventList.repeat = eventList.repetir;
 eventList.limpar = eventList.clear;
 eventList.inserir = eventList.insert;
 eventList.adicionar = eventList.add;
