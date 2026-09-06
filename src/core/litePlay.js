@@ -359,9 +359,15 @@ export const sample = {
   play: function (...evtList) {
     this.instr.play(...evtList);
   },
+  stop: function () {
+    this.instr.stop();
+  },
   instrument: function (what = null, fo = 60, bpm = 0) {
     if (this.instr == null) return this.create(what, fo, bpm).instr;
     else return this.instr;
+  },
+  speed: function (val) {
+    return this.instr.speed(val);
   },
 };
 
@@ -1473,7 +1479,6 @@ export function onDrums() {
 export const silently = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Interface simples em Português
-
 // métodos para objetos e classes
 Instrument.prototype.toque = Instrument.prototype.play;
 Instrument.prototype.pare = Instrument.prototype.stop;
@@ -1507,9 +1512,7 @@ sample.toque = sample.play;
 sample.pare = function () {
   return this.instr.stop();
 };
-sample.velocidade = function (val) {
-  return this.instr.speed(val);
-};
+sample.velocidade = sample.speed;
 
 //demais funções
 export const defineBpm = setBpm;
