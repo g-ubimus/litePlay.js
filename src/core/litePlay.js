@@ -1474,7 +1474,7 @@ export const silently = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Interface simples em Português
 
-// métodos para objetos
+// métodos para objetos e classes
 Instrument.prototype.toque = Instrument.prototype.play;
 Instrument.prototype.pare = Instrument.prototype.stop;
 Instrument.prototype.panAutomático = Instrument.prototype.autoPan;
@@ -1498,6 +1498,20 @@ sequenciador.ativarPausa = sequencer.togglePause;
 sequenciador.ativarMudo = sequencer.toggleMute;
 sequenciador.ativarSolo = sequencer.toggleSolo;
 
+export const amostra = sample;
+export const amostrador = Sampler;
+sample.carregar = sample.load;
+sample.repetir = sample.loop;
+sample.criar = sample.create;
+sample.toque = sample.play;
+sample.pare = function () {
+  return this.instr.stop();
+};
+sample.velocidade = function (val) {
+  return this.instr.speed(val);
+};
+
+//demais funções
 export const defineBpm = setBpm;
 
 export const algum = any;
@@ -1539,15 +1553,6 @@ export const médio = midPitch;
 export const agudo = highPitch;
 
 // instrumentos
-class Instrumento extends Instrument {
-  constructor(pgm, isDrums = false, what = 60, insno = 10) {
-    super(pgm.number, isDrums, what, insno);
-  }
-  toque(...evtList) {
-    super.play(...evtList);
-  }
-}
-
 export const pianoDeCauda = grandPiano;
 export const pianoBrilhante = brightPiano;
 export const deCaudaElétrico = electricGrand;
