@@ -64,3 +64,59 @@ npx serve
 ```JavaScript
 play(C4);
 ```
+
+## Signal Modifiers (effects)
+
+Every instrument also supports Csound's
+[Signal Modifiers](https://csound.com/docs/manual/SigmodTop.html) — every
+category in the Csound manual now has at least one effect wired in — as
+plain methods like `piano.distortion(0.6)`:
+
+- **Waveshaping**: `distortion()`
+- **Filters**: `highpass()`, `moogFilter()`, `combFilter()`
+- **Waveguides**: `stringResonance()`
+- **Dynamics**: `compressor()`, `tremolo()`
+- **Signal Limiters**: `limiter()`
+- **Special Effects**: `ringModulate()`, `flanger()`, `chorus()`, `phaser()`
+- **Sample Level Operators**: `sampleHold()`
+- **Convolution**: `convolve()`
+- **Reverberation**: `reverbTone()`
+
+```JavaScript
+function f() {
+	guitar.distortion(0.6);
+	guitar.flanger(0.3, 0.006, 0.7);
+	play(E2);
+}
+
+lpRun(f);
+```
+
+See [SIGNAL_MODIFIERS.md](SIGNAL_MODIFIERS.md) for the full list, every
+method's parameters, and a usage demo for each one.
+
+## Adding more instruments (soundfonts)
+
+The bundled `assets/audio/gm.sf2` already gives you 128 General MIDI
+instruments (`piano`, `guitar`, `organ`, `drums`, ...). For a different set of
+sounds, load any other `.sf2` file you have the rights to use as a second,
+independent bank of 128 instruments — either click **ADD SOUNDFONT** in the
+web editor, or from code:
+
+```JavaScript
+function f() {
+	soundfont.load("https://example.com/your-file.sf2").then(() => {
+		let altPiano = soundfont.instrument(0);
+		altPiano.play(C4);
+	});
+}
+
+lpRun(f);
+```
+
+`soundfont.instrument(programNumber, isDrums, what)` returns a regular
+instrument — everything else (`play()`, the Signal Modifiers above, the
+sequencer...) works exactly the same as with any built-in instrument. Note
+that automatic percussion-kit mapping is specific to the internal layout of
+the bundled `gm.sf2`, so `isDrums` on a second soundfont is only reliable if
+you already know that file's own preset layout matches.
