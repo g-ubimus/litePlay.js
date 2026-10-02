@@ -64,3 +64,20 @@ npx serve
 ```JavaScript
 play(C4);
 ```
+
+## Adding more instruments (soundfonts)
+
+For a different set of sounds, load any other `.sf2` file you have as a second,
+independent bank of 128 instruments — either click **ADD SOUNDFONT** in the web
+editor, or from code:
+
+```JavaScript
+function f() {
+	soundfont.load("https://example.com/your-file.sf2").then(() => {
+		let altPiano = soundfont.instrument(0);
+		altPiano.play(C4);
+	});
+}
+
+lpRun(f);
+```

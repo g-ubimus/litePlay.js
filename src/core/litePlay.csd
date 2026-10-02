@@ -8,6 +8,14 @@ nchnls_i = 1
 ksmps = 64
 0dbfs = 1
 sr = 44100
+/* topmost cf: maps a normalised 0-1 cutoff onto Hz for the exponential
+filter-cutoff mappings below (vclpf-based lowpass, plus the new HighPass and
+MoogFilter Signal Modifiers). Must be defined here, before first use, since
+Csound's compiler resolves a global variable's rate/value in file order -
+referencing it from an opcode defined earlier in the file (even though the
+opcode itself is only CALLED later, at performance time) still fails to
+compile with "Variable 'gicf' used before defined". */
+gicf = log(sr/2)
 
 ichn = 1
 lp1: massign   ichn, 0
@@ -28,7 +36,10 @@ garev2 init 0
 //delay
 gadel[] init 100
 
-//freq shift
+//chorus
+gachorus[] init 100
+
+//tab 28: frequency shift (+-freq)
 opcode Shift, aa, aak
 	ain1, ain2, kval xin
 	areal1, aimag1 hilbert ain1
@@ -40,6 +51,38 @@ opcode Shift, aa, aak
 	xout aout1, aout2
 endop
 
+//table 35: distortion (0-1)
+opcode Distort, aa, aak
+	ain1, ain2, kchn xin
+	kdrive table kchn, 34
+	ad1 distort ain1, kdrive, 40 
+	ad2 distort ain2, kdrive, 40 
+	aout1 = ain1*(1-kdrive) + ad1*kdrive
+	aout2 = ain2*(1-kdrive) + ad2*kdrive
+	xout aout1, aout2
+endop
+
+//table 35: cutoff (0-1, 0 = transparent/off, 1 = brightest)
+opcode HighPass, aa, aak
+	ain1, ain2, kchn xin
+	kcut table kchn, 35
+	khp = kcut > 0 ? exp((kcut < 1 ? kcut : 1)*gicf) : 1
+	ah1 atone ain1, khp
+	ah2 atone ain2, khp
+	aout1 = kcut > 0 ? ah1 : ain1
+	aout2 = kcut > 0 ? ah2 : ain2
+	xout aout1, aout2
+endop
+
+//table 36: rate in Hz; table 37: depth (0-1, 0 = exact bypass)
+opcode Tremolo, aa, aak
+	ain1, ain2, kchn xin
+	krate table kchn, 36 
+	kdepth table kchn, 37 
+	klfo oscili kdepth, krate, 33
+	kenv = 1 - kdepth*0.5 + klfo
+	xout ain1*kenv, ain2*kenv
+endop
 
 //---------------------------------------------
 // this instrument parses MIDI input
@@ -148,8 +191,6 @@ nxt:
   endif
 endin
 
-/* topmost cf */
-gicf = log(sr/2)
 /* this is the GM soundfont synthesizer instrument */
 instr 10
 	iatt table p7,23
@@ -177,10 +218,14 @@ instr 10
 	a1 = a1f
 	a2 = a2f
 	//frequency shifter
-	kshift table p7,28 
+	kshift table p7,28
 	a1, a2 Shift a1, a2, kshift
+	//signal modifiers
+	a1, a2 Distort a1, a2, p7
+	a1, a2 HighPass a1, a2, p7
+	a1, a2 Tremolo a1, a2, p7
 	//panning
-	kvol tablei kv, 5 
+	kvol tablei kv, 5
 	kpan  table p7, 3
 	krate table p7, 32
 	kbase = (kpan - 64)/128
@@ -188,10 +233,21 @@ instr 10
 	kpan  = kbase + klfo
 	a1 *= kvol*(0.5-kpan/2)
 	a2 *= kvol*(0.5+kpan/2)
-	//send to delay 
-	gadel[p7] = gadel[p7] + a1
-	gadel[p7] = gadel[p7] + a2
-	//send to reverb 
+	//send to delay (gated on kdt so an inactive channel's bus never accumulates)
+	kdt table p7,30
+	if kdt > 0 then
+		gadel[p7] = gadel[p7] + a1
+		gadel[p7] = gadel[p7] + a2
+	endif
+	//send to chorus / comb-filter (each gated on its own
+	//active-flag table so a channel that never enables an effect never
+	//accumulates into that effect's bus)
+	kchon table p7, 60
+	if kchon > 0 then
+		gachorus[p7] = gachorus[p7] + a1
+		gachorus[p7] = gachorus[p7] + a2
+	endif
+	//send to reverb
 	krev table p7,8
 	garev1 += a1*krev
 	garev2 += a2*krev
@@ -303,18 +359,34 @@ instr 12
 	a2 = a2f
 
 	kshift table p7,28 //frequency shifter
-	a1, a2 Shift a1, a2, kshift 
+	a1, a2 Shift a1, a2, kshift
+
+	//signal modifiers
+	a1, a2 Distort a1, a2, p7
+	a1, a2 HighPass a1, a2, p7
+	a1, a2 Tremolo a1, a2, p7
 
 	a1 *= (0.5-kpan/2)
 	a2 *= (0.5+kpan/2)
-	//send to delay 
-	gadel[p7] = gadel[p7] + a1
-	gadel[p7] = gadel[p7] + a2
+	//send to delay (gated on kdt so an inactive channel's bus never accumulates)
+	kdt table p7,30
+	if kdt > 0 then
+		gadel[p7] = gadel[p7] + a1
+		gadel[p7] = gadel[p7] + a2
+	endif
+	//send to  chorus (gated on its own active-flag table so a channel 
+	//that never enables an effect never accumulates into that effect's bus)
+	kchon table p7, 60
+	if kchon > 0 then
+		gachorus[p7] = gachorus[p7] + a1
+		gachorus[p7] = gachorus[p7] + a2
+	endif
+	kcbon table p7, 62
 	//send to reverb
 	krev table p7,8
 	garev1 += a1*krev
 	garev2 += a2*krev
-	
+
 	//send to master
 	gaLeft = gaLeft + (a1*.2)
 	gaRight = gaRight + (a2*.2)
@@ -335,9 +407,23 @@ tablew ign,p6,9
 tablew p5,p6,10
 endin
 
+// loading a second soundfont bank (mirrors instr 2's dynamic sample
+// loading above). p4 is a filename already materialized in the WASM
+// filesystem; its presets land at preset index 1000+, comfortably clear of
+// the built-in gm.sf2 bank's own used range (melodic 0-127, drum kit
+// 317-444), so both banks stay addressable through the same sfplay call in
+// instr 10 via one global preset index (see Instrument's bankOffset in
+// litePlay.js).
+// i3 0 0 "soundfont.sf2"
+instr 3
+Sfile = p4
+gisf2 sfload Sfile
+sfpassign 1000, gisf2
+endin
+
 // reverb
 instr 100
-	a1, a2 freeverb garev1, garev2, 0.7, 0.35
+	a1, a2 freeverb garev1, garev2, 0.7, 0.35	
 
 	//send to master
 	gaLeft = gaLeft + a1
@@ -361,6 +447,20 @@ instr 105
 	endif
 endin
 
+// chorus
+instr 107
+	krate table p4, 38 
+	kdepth table p4, 39 
+	adepth = kdepth
+	adel oscili adepth, krate, 33
+	adel = adepth + adel
+	ain = gachorus[p4]
+	ach flanger ain, adel, 0, 0.06
+	gachorus[p4] = 0
+	gaLeft = gaLeft + ach
+	gaRight = gaRight + ach
+endin
+
 // master output
 instr 110
 	a1 clip gaLeft, 0, .99
@@ -382,13 +482,15 @@ instr 200
 	turnoff2 1, 0, 0
 	turnoff2 100, 0, 0
 	turnoff2 105, 0, 0
+	turnoff2 107, 0, 0
 	turnoff2 110, 0, 0
-	
+
 	turnoff3 10
 	turnoff3 12
 	turnoff3 1
 	turnoff3 100
 	turnoff3 105
+	turnoff3 107
 	turnoff3 110
 	schedule(300, .1, 1)
 	turnoff
@@ -457,6 +559,14 @@ f30 0 1024 7 0 1024 0  /* delay time */
 f31 0 1024 7 0 1024 0  /* delay feedback */
 f32 0 1024 -7 0 1024 0  /* auto-pan rate (Hz) per channel */
 f33 0 4096 10 1  /* sine wave for auto-pan LFO */
+f34 0 1024 -7 0 1024 0  /* distortion drive (0 = off) */
+f35 0 1024 -7 0 1024 0  /* highpass cutoff (0 = off) */
+f36 0 1024 -7 5 1024 5  /* tremolo rate (Hz) */
+f37 0 1024 -7 0 1024 0  /* tremolo depth (0 = off) */
+f38 0 1024 -7 0.25 1024 0.25  /* chorus rate (Hz) */
+f39 0 1024 -7 0 1024 0  /* chorus depth in seconds (JS clamps to 0-0.025) */
+f40 0 257 9 .5 1 270  /* distortion waveshaping table (GEN09, per the distort/GEN09 manual example) */
+f60 0 1024 -7 0 1024 0  /* chorus active flag (0/1) */
 
 i 1 0 z
 i 100 0 z

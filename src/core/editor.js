@@ -20,6 +20,8 @@ import {
   register,
 } from "https://esm.sh/extendable-media-recorder";
 import { connect } from "https://esm.sh/extendable-media-recorder-wav-encoder";
+// snippet palette
+import { SNIPPET_CATEGORIES, buildInsertion } from "./snippets.js";
 
 // override function to print output in console
 const consoleOutput = document.getElementById("console-output");
@@ -87,7 +89,7 @@ const stopLP = async (event) => {
 
 // import constants for autocompletion
 import * as litePlayLang from "./litePlay.js";
-import { midiRecorder } from "./litePlay.js";
+import { midiRecorder, soundfont } from "./litePlay.js";
 import * as extra from "./extra.js";
 const lpKeys = Object.keys(litePlayLang);
 const extraKeys = Object.keys(extra);
@@ -120,8 +122,8 @@ function litePlayCompletions(context) {
       return {
         label: keyword,
         type: cmType,
-        detail: jsType, // Shows "function" or "object" next to the name
-        info: source.sourceName, // Tooltip showing which file it came from
+        //detail: jsType, // Shows "function" or "object" next to the name
+        //info: source.sourceName, // Tooltip showing which file it came from
       };
     }),
   );
@@ -215,8 +217,35 @@ const functionSignatures = {
   panAutomático: "panAutomático(hertz)",
   pare: "pare()",
   instrumento: "instrumento(nomeDoInstrumento)",
-  escolha: "escolha(opcao1, opcao2, ...)",
+  escolha: "escolha(opção 1, opção 2, ...)",
   quieto: "quieto(ms)",
+  distortion: "distortion(amount)",
+  highpass: "highpass(cutoff)",
+  moogFilter: "moogFilter(cutoff, resonance)",
+  combFilter: "combFilter(decay, delayTime)",
+  noCombFilter: "noCombFilter()",
+  stringResonance: "stringResonance(frequency, feedback, mix)",
+  compressor: "compressor(amount, threshold)",
+  tremolo: "tremolo(rate, depth)",
+  limiter: "limiter(ceiling)",
+  ringModulate: "ringModulate(frequency, mix)",
+  flanger: "flanger(rate, depth, feedback)",
+  noFlanger: "noFlanger()",
+  chorus: "chorus(rate, depth)",
+  noChorus: "noChorus()",
+  phaser: "phaser(rate, num stages, feedback)",
+  noPhaser: "noPhaser()",
+  sampleHold: "sampleHold(rate, mix)",
+  convolve: "convolve(amount)",
+  noConvolve: "noConvolve()",
+  reverbTone: "reverbTone(size, damping)",
+  reverb: "reverb(amount)",
+  cutoff: "cutoff(amount)",
+  resonance: "resonance(amount)",
+  delay: "delay(time, feedback)",
+  shift: "shift(frequency)",
+  pan: "pan(amount)",
+  volume: "volume(amount)",
 };
 
 const signatureTooltipField = StateField.define({
@@ -366,6 +395,118 @@ let editor = new EditorView({
   state: startState,
   parent: document.getElementById("editor-container"),
 });
+
+// snippet palette: click a card to insert working code
+function insertSnippet(code) {
+  const doc = editor.state.doc.toString();
+  const cursorPos = editor.state.selection.main.head;
+  const { from, to, insert, cursor } = buildInsertion(doc, cursorPos, code);
+
+  editor.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: cursor },
+  });
+  editor.focus();
+
+  const editorContainer = document.getElementById("editor-container");
+  if (editorContainer) {
+    editorContainer.classList.add("snippet-flash");
+    setTimeout(() => editorContainer.classList.remove("snippet-flash"), 600);
+  }
+}
+
+function buildSnippetPalette() {
+  const list = document.getElementById("snippet-list");
+  if (!list) return;
+
+  SNIPPET_CATEGORIES.forEach((category, index) => {
+    const details = document.createElement("details");
+    details.className = "snippet-category";
+    details.dataset.categoryId = category.id;
+    if (index === 0) details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.textContent = category.title;
+    details.appendChild(summary);
+
+    category.items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "snippet-item";
+      row.dataset.searchText = `${item.label} ${item.description || ""}`
+        .trim()
+        .toLowerCase();
+
+      const insertBtn = document.createElement("button");
+      insertBtn.className = "snippet-insert";
+      insertBtn.title = "Insert into your code";
+      if (item.description) {
+        insertBtn.innerHTML =
+          `<span class="snippet-label"></span>` +
+          `<span class="snippet-desc"></span>`;
+        insertBtn.querySelector(".snippet-label").textContent = item.label;
+        insertBtn.querySelector(".snippet-desc").textContent = item.description;
+      } else {
+        insertBtn.innerHTML = `<span class="snippet-label"></span>`;
+        insertBtn.querySelector(".snippet-label").textContent = item.label;
+      }
+      insertBtn.addEventListener("click", () => insertSnippet(item.code));
+
+      const runBtn = document.createElement("button");
+      runBtn.className = "snippet-run";
+      runBtn.title = "Insert and run now";
+      runBtn.setAttribute("aria-label", `Insert and run: ${item.label}`);
+      runBtn.textContent = "▶";
+      runBtn.addEventListener("click", () => {
+        insertSnippet(item.code);
+        runLP();
+      });
+
+      row.appendChild(insertBtn);
+      row.appendChild(runBtn);
+      details.appendChild(row);
+    });
+
+    list.appendChild(details);
+  });
+}
+
+buildSnippetPalette();
+
+// snippet search: filter cards by label/description, auto-expanding matches
+const snippetSearch = document.getElementById("snippet-search");
+if (snippetSearch) {
+  snippetSearch.addEventListener("input", () => {
+    const query = snippetSearch.value.trim().toLowerCase();
+    const categories = document.querySelectorAll(".snippet-category");
+
+    categories.forEach((category) => {
+      let categoryHasMatch = false;
+      category.querySelectorAll(".snippet-item").forEach((row) => {
+        const matches = query === "" || row.dataset.searchText.includes(query);
+        row.classList.toggle("no-match", !matches);
+        if (matches) categoryHasMatch = true;
+      });
+      category.classList.toggle("no-match", !categoryHasMatch);
+      if (query !== "") category.open = categoryHasMatch;
+      else category.open = category.dataset.categoryId === "basics";
+    });
+  });
+}
+
+// snippet panel show/hide toggle
+const snippetPanel = document.getElementById("snippet-panel");
+const snippetToggleBtn = document.getElementById("snippet-toggle-btn");
+const snippetCloseBtn = document.getElementById("snippet-close-btn");
+if (snippetPanel && snippetToggleBtn) {
+  snippetToggleBtn.addEventListener("click", () => {
+    snippetPanel.classList.toggle("hidden");
+  });
+}
+if (snippetPanel && snippetCloseBtn) {
+  snippetCloseBtn.addEventListener("click", () => {
+    snippetPanel.classList.add("hidden");
+  });
+}
 
 // start litePlay
 let liteplayEngine = null;
@@ -524,6 +665,29 @@ document
     );
   });
 
+// add soundfont: load a .sf2 file as a second, independent bank of 128
+// instruments, addressed via soundfont.instrument(programNumber)
+document
+  .getElementById("soundfont-btn")
+  .addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!csound) {
+      console.log("Start engine before uploading a soundfont...");
+      return;
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    await csound.fs.writeFile("localsf.sf2", new Uint8Array(arrayBuffer));
+    csound.inputMessage('i3 0 0.1 "localsf.sf2"');
+    soundfont.loaded = true;
+    console.log(
+      `Successfully loaded ${file.name} as a second soundfont bank.\n` +
+        "Use soundfont.instrument(programNumber) to get an instrument from it, e.g.:\n" +
+        "let altPiano = soundfont.instrument(0);\naltPiano.play(C4);",
+    );
+  });
+
 // buttons actions
 const runButton = document.querySelector("#run-btn");
 runButton.addEventListener("click", runLP);
@@ -545,44 +709,5 @@ if (logCheckbox) {
   logCheckbox.addEventListener("change", () => {
     console.log("console.log: disabled");
     logEverything = logCheckbox.checked;
-  });
-}
-
-// Machine listening
-const mlConsole = document.getElementById("ml-console");
-
-// Create the callback function to handle incoming data
-function handleNewMusicalEvent(eventData) {
-  const textOutput = `Event: [${eventData[0]}, ${eventData[1]}, ${eventData[2]}, ${eventData[3]}]\n`;
-
-  const mlConsole = document.getElementById("ml-console");
-
-  if (mlConsole) {
-    mlConsole.value += textOutput;
-    mlConsole.scrollTop = mlConsole.scrollHeight; // Auto-scroll to bottom
-  } else {
-    console.warn("Could not find the ML console in the HTML!");
-  }
-}
-
-const listenCheckbox = document.querySelector("#listen-check");
-if (listenCheckbox) {
-  listenCheckbox.addEventListener("change", async () => {
-    if (listenCheckbox.checked) {
-      if (!window.audio_context) {
-        console.error("Start the litePlay engine first!");
-        listenCheckbox.checked = false;
-        return;
-      }
-      try {
-        await toggleListening(window.audio_context, handleNewMusicalEvent);
-        console.log("Machine Listening successfully running in background.");
-      } catch (err) {
-        console.error("Machine Listening failed to start:", err);
-        listenCheckbox.checked = false;
-      }
-    } else {
-      stopListening();
-    }
   });
 }

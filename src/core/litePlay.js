@@ -10,6 +10,8 @@ const srcurl = new URL("../../", import.meta.url).href;
 // CSD file name
 const csd = "src/core/litePlay.csd";
 const sfont = "assets/audio/gm.sf2";
+// bundled impulse response for the convolve() Signal Modifier
+const defaultIR = "assets/audio/ir_room.wav";
 
 // this is the JS function to start Csound
 export async function startEngine() {
@@ -27,6 +29,8 @@ export async function startEngine() {
     await csound.setOption("-M0");
     // copy the sfont file to the Csound local filesystem
     await copyUrlToLocal(srcurl + sfont, "gm.sf2");
+    // copy the bundled impulse response used by convolve()
+    await copyUrlToLocal(srcurl + defaultIR, "ir_room.wav");
     // copy the CSD file to the Csound local filesystem
     await copyUrlToLocal(srcurl + csd, csd);
     // compile csound code
@@ -65,10 +69,16 @@ const globalObj = {
 };
 // hold delay lines
 const delayLines = new Set();
+// hold per-channel Signal Modifier bus effects (flanger/chorus/phaser/comb)
+const flangerLines = new Set();
+const chorusLines = new Set();
+const phaserLines = new Set();
+const combLines = new Set();
+const convolveLines = new Set();
 
 // Csound instrument class
 export class Instrument {
-  constructor(pgm, isDrums = false, what = 60.0, instr = 10) {
+  constructor(pgm, isDrums = false, what = 60.0, instr = 10, bankOffset = 0) {
     this.pgm = pgm;
     this.chn = globalObj.freeChannel;
     globalObj.freeChannel =
@@ -81,6 +91,9 @@ export class Instrument {
     this.howLong = 1;
     this.on = new Uint8Array(128);
     this.instr = instr;
+    // which soundfont bank's presets this instrument addresses (0 = the
+    // built-in gm.sf2; see the `soundfont` export for additional banks)
+    this.bankOffset = bankOffset;
   }
 
   what(snd) {
@@ -88,10 +101,10 @@ export class Instrument {
   }
 
   score(what, howLoud, when, howLong) {
-    let prog = this.pgm;
+    let prog = this.bankOffset + this.pgm;
     let instr = this.instr + what / 1000000 + this.chn / globalObj.maxChannel;
     if (this.isDrums) {
-      if (prog == 7) csound.tableSet(26, this.chn, 2);
+      if (this.pgm == 7) csound.tableSet(26, this.chn, 2);
       else csound.tableSet(26, this.chn, 0.5);
       if (what == 29 || what == 30) instr = 10.97;
       else if (what == 42 || what == 44 || what == 46 || what == 49)
@@ -101,7 +114,10 @@ export class Instrument {
       else if (what == 78 || what == 79) instr = 10.94;
       else if (what == 80 || what == 81) instr = 10.95;
       else if (what == 86 || what == 87) instr = 10.96;
-      prog = 317 + this.pgm;
+      // "+317" is where gm.sf2's own drum kit happens to land in the
+      // sfpassign preset order; a different soundfont's percussion presets
+      // aren't guaranteed to follow the same layout (see `soundfont` below).
+      prog = this.bankOffset + 317 + this.pgm;
     }
 
     if (howLong <= 0) this.on[what] = 1;
@@ -323,6 +339,38 @@ export class Instrument {
       csound.inputMessage("i105." + this.chn + " 0 -1 " + this.chn);
     }
   }
+
+  distortion(amount) {
+    csound.tableSet(34, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
+  }
+
+  highpass(cutoff) {
+    csound.tableSet(35, this.chn, cutoff < 1 ? (cutoff > 0 ? cutoff : 0) : 1);
+  }
+
+  tremolo(rate, depth) {
+    csound.tableSet(40, this.chn, rate < 10 ? rate : 0);
+    csound.tableSet(41, this.chn, depth < 1 ? (depth > 0 ? depth : 0) : 1);
+  }
+
+  chorus(rate, depth) {
+    const r = Number.isFinite(rate) ? rate : 0;
+    const d = Number.isFinite(depth) ? depth : 0;
+    if (r <= 0 || d <= 0) {
+      csound.tableSet(60, this.chn, 0);
+      if (chorusLines.delete(this.chn)) {
+        csound.inputMessage("i-107." + this.chn + " 0 0.1 " + this.chn);
+      }
+      return;
+    }
+    csound.tableSet(49, this.chn, r > 0 ? r : 0.25);
+    csound.tableSet(50, this.chn, Math.min(Math.max(d, 0), 0.025));
+    csound.tableSet(60, this.chn, 1);
+    if (!chorusLines.has(this.chn)) {
+      chorusLines.add(this.chn);
+      csound.inputMessage("i107." + this.chn + " 0 -1 " + this.chn);
+    }
+  }
 }
 
 export const sample = {
@@ -380,6 +428,25 @@ export class Sampler extends Instrument {
     csound.tableSet(16, this.chn, val);
   }
 }
+
+// A second, independently-addressable soundfont bank. Its presets land at
+// preset index 1000+ Percussion-kit mapping (the "+317" used for gm.sf2's own
+// drum kits) is specific to gm.sf2's internal preset layout, so isDrums here
+// is left to the caller to opt into deliberately rather than assumed.
+export const soundfont = {
+  offset: 1000,
+  loaded: false,
+  load: function (url) {
+    return copyUrlToLocal(url, "localsf.sf2").then(() => {
+      csound.inputMessage('i3 0 0.1 "localsf.sf2"');
+      this.loaded = true;
+      return this;
+    });
+  },
+  instrument: function (pgm, isDrums = false, what = 60.0) {
+    return new Instrument(pgm, isDrums, what, 10, this.offset);
+  },
+};
 
 // resolve an instrument or sample object into an Instrument
 function toInstr(instr) {
@@ -835,12 +902,17 @@ export async function reset() {
     sequencer.stop();
     await csound.inputMessage("i 200 0 0.1");
     delayLines.clear();
+    flangerLines.clear();
+    chorusLines.clear();
+    phaserLines.clear();
+    combLines.clear();
+    convolveLines.clear();
   } else {
     console.log("No Csound instance found!");
   }
 }
 
-// MIDI Recorder ────────────────────────────────────────────────────────────
+// MIDI Recorder
 export const midiRecorder = {
   recording: false,
   _events: [],
@@ -954,10 +1026,10 @@ export const midiRecorder = {
       ];
     }
 
-    // ── Preprocess events (match Note On / Note Off) ───────────────────────
+    // Preprocess events (match Note On / Note Off)
     // activeNotes stores a queue (array) per channel_pitch key so that the
     // same note can be triggered multiple times while already sounding.
-    // Each Note Off is matched to the earliest pending Note On (FIFO).
+    // Each Note Off is matched to the earliest pending Note On (FIFO)
     const processedNotes = [];
     const activeNotes = new Map(); // channel_pitch -> onEvent[]
     const stopTimeSec = this._stopClockRef - this._clockRef;
@@ -1009,7 +1081,7 @@ export const midiRecorder = {
       }
     }
 
-    // ── Tempo track (track 0) ──────────────────────────────────────────────
+    // Tempo track (track 0)
     const tempoTrackEvents = tempoMap.map((t) => {
       const us = Math.round(60_000_000 / t.bpm);
       return {
@@ -1026,7 +1098,7 @@ export const midiRecorder = {
     });
     const tempoTrack = buildTrack(tempoTrackEvents);
 
-    // ── Group events by channel ────────────────────────────────────────────
+    // Group events by channel
     const channelMap = new Map(); // channel → { program, isDrums, events[] }
     for (const evt of processedNotes) {
       if (!channelMap.has(evt.channel)) {
@@ -1039,7 +1111,7 @@ export const midiRecorder = {
       channelMap.get(evt.channel).events.push(evt);
     }
 
-    // ── Build one MIDI track per channel ──────────────────────────────────
+    // Build one MIDI track per channel
     // Standard MIDI channels are 0-15. Drums go on channel 9 (GM convention).
     // We'll remap litePlay channels (which start at 16) to 0-15 sequentially.
     const channelKeys = [...channelMap.keys()].sort((a, b) => a - b);
@@ -1089,7 +1161,7 @@ export const midiRecorder = {
       instrumentTracks.push(buildTrack(absEvts));
     }
 
-    // ── Assemble SMF header ────────────────────────────────────────────────
+    // Assemble SMF header
     const numTracks = 1 + instrumentTracks.length; // tempo + instrument tracks
     const header = [
       0x4d,
@@ -1119,7 +1191,6 @@ export const midiRecorder = {
     console.log(`MIDI file downloaded: ${a.download}`);
   },
 };
-// ─────────────────────────────────────────────────────────────────────────────
 
 // sub() function to have subdivisions for the rhythms in the sequencer
 export const sub = (...notes) => ({ isSub: true, notes });
