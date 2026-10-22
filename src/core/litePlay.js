@@ -1,6 +1,6 @@
-// ceound.js is the Csound WASM module
+// csound.js is the Csound WASM module (Csound 7.0.0 stable)
 const csoundjs =
-  "https://cdn.jsdelivr.net/npm/@csound/browser@6.18.5/dist/csound.js";
+  "https://cdn.jsdelivr.net/npm/@csound/browser@7.0.0/dist/csound.js";
 // csound is the Csound engine object (null as we start)
 export let csound = null;
 // audio context
@@ -33,11 +33,33 @@ export async function startEngine() {
     await copyUrlToLocal(srcurl + defaultIR, "ir_room.wav");
     // copy the CSD file to the Csound local filesystem
     await copyUrlToLocal(srcurl + csd, csd);
-    // compile csound code
-    await csound.compileCsd(csd);
+    // compile csound code (mode 0 = path in the Csound filesystem)
+    await csound.compileCSD(csd, 0);
     // start the engine
     await csound.start();
   }
+}
+
+// Csound 7 removed tableSet/tableGet, so emulate a single-slot update using
+// the table copy methods. Writes to the same table are serialised so that
+// concurrent calls cannot overwrite each other's values.
+const tableWriteQueues = new Map();
+
+function setTableValue(tableNumber, tableIndex, value) {
+  if (!csound) return Promise.resolve();
+  const previous = tableWriteQueues.get(tableNumber) ?? Promise.resolve();
+  const next = previous
+    .then(async () => {
+      const table = await csound.tableCopyOut(tableNumber);
+      if (!table || tableIndex < 0 || tableIndex >= table.length) return;
+      table[tableIndex] = value;
+      await csound.tableCopyIn(tableNumber, table);
+    })
+    .catch((error) => {
+      console.error(`Could not set table ${tableNumber}[${tableIndex}]`, error);
+    });
+  tableWriteQueues.set(tableNumber, next);
+  return next;
 }
 
 // copy URL to local file
@@ -96,8 +118,8 @@ export class Instrument {
     let prog = this.pgm;
     let instr = this.instr + what / 1000000 + this.chn / globalObj.maxChannel;
     if (this.isDrums) {
-      if (prog == 7) csound.tableSet(26, this.chn, 2);
-      else csound.tableSet(26, this.chn, 0.5);
+      if (prog == 7) setTableValue(26, this.chn, 2);
+      else setTableValue(26, this.chn, 0.5);
       if (what == 29 || what == 30) instr = 10.97;
       else if (what == 42 || what == 44 || what == 46 || what == 49)
         instr = 10.91;
@@ -258,26 +280,26 @@ export class Instrument {
 
   bend(amount) {
     const val = 2 ** (amount / 12);
-    csound.tableSet(14, this.chn, val);
+    setTableValue(14, this.chn, val);
   }
 
   reverb(amount) {
-    csound.tableSet(8, this.chn, amount);
+    setTableValue(8, this.chn, amount);
   }
 
   cutoff(amount) {
-    csound.tableSet(17, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
+    setTableValue(17, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
   }
 
   resonance(amount) {
-    csound.tableSet(18, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
+    setTableValue(18, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
   }
 
   pan(amount) {
     if (amount) {
       this.autoPan(0);
     }
-    csound.tableSet(
+    setTableValue(
       3,
       this.chn,
       (amount < 1 ? (amount > 0 ? amount : 0) : 1) * 127,
@@ -285,7 +307,7 @@ export class Instrument {
   }
 
   volume(amount) {
-    csound.tableSet(
+    setTableValue(
       2,
       this.chn,
       (amount < 1 ? (amount > 0 ? amount : 0) : 1) * 127,
@@ -293,26 +315,26 @@ export class Instrument {
   }
 
   autoPan(hertz) {
-    csound.tableSet(32, this.chn, hertz > 0 ? 1 / hertz : 0);
+    setTableValue(32, this.chn, hertz > 0 ? 1 / hertz : 0);
   }
 
   filterEnvelope(amount, att, dec, sus, rel) {
-    csound.tableSet(19, this.chn, att);
-    csound.tableSet(20, this.chn, dec);
-    csound.tableSet(21, this.chn, sus);
-    csound.tableSet(22, this.chn, rel);
-    csound.tableSet(27, this.chn, amount);
+    setTableValue(19, this.chn, att);
+    setTableValue(20, this.chn, dec);
+    setTableValue(21, this.chn, sus);
+    setTableValue(22, this.chn, rel);
+    setTableValue(27, this.chn, amount);
   }
 
   ampEnvelope(att, dec, sus, rel) {
-    csound.tableSet(23, this.chn, att);
-    csound.tableSet(24, this.chn, dec);
-    csound.tableSet(25, this.chn, sus);
-    csound.tableSet(26, this.chn, rel);
+    setTableValue(23, this.chn, att);
+    setTableValue(24, this.chn, dec);
+    setTableValue(25, this.chn, sus);
+    setTableValue(26, this.chn, rel);
   }
 
   shift(val) {
-    csound.tableSet(28, this.chn, val);
+    setTableValue(28, this.chn, val);
   }
 
   delay(time, feedback) {
@@ -321,8 +343,8 @@ export class Instrument {
         csound.inputMessage("i-105." + this.chn + " 0 0.1 " + this.chn);
       }
     }
-    csound.tableSet(30, this.chn, Math.min(Math.max(time, 0), 2));
-    csound.tableSet(31, this.chn, Math.min(Math.max(feedback, 0), 0.99));
+    setTableValue(30, this.chn, Math.min(Math.max(time, 0), 2));
+    setTableValue(31, this.chn, Math.min(Math.max(feedback, 0), 0.99));
     if (!delayLines.has(this.chn)) {
       delayLines.add(this.chn);
       csound.inputMessage("i105." + this.chn + " 0 -1 " + this.chn);
@@ -330,31 +352,31 @@ export class Instrument {
   }
 
   distortion(amount) {
-    csound.tableSet(34, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
+    setTableValue(34, this.chn, amount < 1 ? (amount > 0 ? amount : 0) : 1);
   }
 
   highpass(cutoff) {
-    csound.tableSet(35, this.chn, cutoff < 1 ? (cutoff > 0 ? cutoff : 0) : 1);
+    setTableValue(35, this.chn, cutoff < 1 ? (cutoff > 0 ? cutoff : 0) : 1);
   }
 
   tremolo(rate, depth) {
-    csound.tableSet(36, this.chn, rate < 10 ? rate : 0);
-    csound.tableSet(37, this.chn, depth < 1 ? (depth > 0 ? depth : 0) : 1);
+    setTableValue(36, this.chn, rate < 10 ? rate : 0);
+    setTableValue(37, this.chn, depth < 1 ? (depth > 0 ? depth : 0) : 1);
   }
 
   chorus(rate, depth) {
     const r = Number.isFinite(rate) ? rate : 0;
     const d = Number.isFinite(depth) ? depth : 0;
     if (r <= 0 || d <= 0) {
-      csound.tableSet(60, this.chn, 0);
+      setTableValue(60, this.chn, 0);
       if (chorusLines.delete(this.chn)) {
         csound.inputMessage("i-107." + this.chn + " 0 0.1 " + this.chn);
       }
       return;
     }
-    csound.tableSet(38, this.chn, r > 0 ? r : 0.25);
-    csound.tableSet(39, this.chn, Math.min(Math.max(d, 0), 0.025));
-    csound.tableSet(60, this.chn, 1);
+    setTableValue(38, this.chn, r > 0 ? r : 0.25);
+    setTableValue(39, this.chn, Math.min(Math.max(d, 0), 0.025));
+    setTableValue(60, this.chn, 1);
     if (!chorusLines.has(this.chn)) {
       chorusLines.add(this.chn);
       csound.inputMessage("i107." + this.chn + " 0 -1 " + this.chn);
@@ -374,12 +396,12 @@ export const sample = {
       csound.inputMessage(
         "i2 0 0" + ' "localfile" ' + this.fo + " " + this.number,
       );
-      if (bpm > 0) csound.tableSet(15, this.number, getBpm() / bpm);
+      if (bpm > 0) setTableValue(15, this.number, getBpm() / bpm);
     });
   },
   loop: function (start, end) {
-    csound.tableSet(11, this.number, start);
-    csound.tableSet(12, this.number, end);
+    setTableValue(11, this.number, start);
+    setTableValue(12, this.number, end);
   },
   create: function (what = null, fo = 60, bpm = 0) {
     let e = Object.create(sample);
@@ -410,11 +432,11 @@ export class Sampler extends Instrument {
   }
   play(...evtLst) {
     if (this.sample.bpm > 0)
-      csound.tableSet(15, this.number, getBpm() / this.sample.bpm);
+      setTableValue(15, this.number, getBpm() / this.sample.bpm);
     super.play(...evtLst);
   }
   speed(val) {
-    csound.tableSet(16, this.chn, val);
+    setTableValue(16, this.chn, val);
   }
 }
 
