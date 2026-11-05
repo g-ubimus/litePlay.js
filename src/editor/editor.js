@@ -92,9 +92,9 @@ const stopLP = async (event) => {
 };
 
 // import constants for autocompletion
-import * as litePlayLang from "./litePlay.js";
-import { midiRecorder } from "./litePlay.js";
-import * as extra from "./extra.js";
+import * as litePlayLang from "../core/litePlay.js";
+import { midiRecorder } from "../core/litePlay.js";
+import * as extra from "../core/extra.js";
 const lpKeys = Object.keys(litePlayLang);
 const extraKeys = Object.keys(extra);
 const lpConstKeys = Object.keys(window.lpAutocomplete);
