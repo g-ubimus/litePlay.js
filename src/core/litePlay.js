@@ -802,7 +802,6 @@ export const eventList = {
     else this.events.splice(ndx, 1);
   },
   insert: function (pos, ...evtLst) {
-    let start = pos;
     for (const evt of evtLst) this.events.splice(pos, 0, evt);
   },
 };
