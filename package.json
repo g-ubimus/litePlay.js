@@ -4,7 +4,8 @@
   "description": "litePlay.js ======",
   "main": "eslint.config.mjs",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "surface": "node tools/dumpSurface.mjs"
   },
   "repository": {
     "type": "git",

@@ -91,153 +91,97 @@ const stopLP = async (event) => {
   }
 };
 
-// import constants for autocompletion
-import * as litePlayLang from "../core/litePlay.js";
+// import the static API index for completions and signatures
+import { LP_INDEX, NOTE_FAMILY } from "../agent/lpIndex.js";
+import {
+  GLOBAL_ENTRIES,
+  detectLanguage,
+  matches,
+  normalize,
+  pickLabel,
+} from "../agent/lpIndex.query.js";
 import { midiRecorder } from "../core/litePlay.js";
 import * as extra from "../core/extra.js";
-const lpKeys = Object.keys(litePlayLang);
-const extraKeys = Object.keys(extra);
-const lpConstKeys = Object.keys(window.lpAutocomplete);
+
+// Concrete note names still come from the classic constants script; the index
+// only describes what they mean.
+const noteNames = Object.keys(window.lpAutocomplete ?? {}).filter((name) =>
+  NOTE_FAMILY.pattern.test(name),
+);
+
+const signaturesByName = new Map();
+for (const item of LP_INDEX) {
+  if (!item.signature) continue;
+  const names = [item.name, ...item.alias.en, ...item.alias.pt];
+  for (const name of names) {
+    if (!signaturesByName.has(name)) signaturesByName.set(name, item.signature);
+  }
+}
+
+function completionType(item) {
+  if (item.kind === "function") return "function";
+  if (item.kind === "class") return "class";
+  if (item.kind === "namespace") return "namespace";
+  if (item.kind === "constant" || item.kind === "family") return "constant";
+  if (item.kind === "instrument") return "variable";
+  return "variable";
+}
+
+function completionRank(item, typed) {
+  const needle = normalize(typed);
+  const name = normalize(item.name);
+  if (name === needle) return 0;
+  if (name.startsWith(needle)) return 1;
+  if (item.alias.en.some((alias) => normalize(alias).startsWith(needle))) return 2;
+  if (item.alias.pt.some((alias) => normalize(alias).startsWith(needle))) return 3;
+  return 4;
+}
 
 function litePlayCompletions(context) {
-  let word = context.matchBefore(/[a-zA-Z0-9_À-ÿ]+/);
+  const word = context.matchBefore(/[\p{L}0-9_]+/u);
   if (!word && !context.explicit) return null;
 
-  // 1. Define the different sources of keywords
-  const sources = [
-    { keys: lpKeys, lib: litePlayLang, sourceName: "litePlay" },
-    { keys: extraKeys, lib: extra, sourceName: "extra" },
-    { keys: lpConstKeys, lib: window.lpAutocomplete, sourceName: "constants" },
-  ];
+  const typed = word ? word.text : "";
+  const language = detectLanguage(context.state.doc.toString());
+  const ranked = [];
 
-  // 2. Flatten all keys into a single array of options
-  const options = sources.flatMap((source) =>
-    source.keys.map((keyword) => {
-      // Look up the actual value in the corresponding library namespace
-      const itemValue = source.lib[keyword];
-      const jsType = typeof itemValue;
+  for (const item of GLOBAL_ENTRIES) {
+    if (item.kind === "family") continue;
+    if (!matches(item, typed)) continue;
+    const label = pickLabel(item, typed, language);
+    ranked.push({
+      rank: completionRank(item, typed),
+      label,
+      option: {
+        label,
+        type: completionType(item),
+        detail: item.signature ?? item.category,
+        info: item.summary || undefined,
+        apply: label,
+      },
+    });
+  }
 
-      // Map JS types to CodeMirror autocomplete icons/types
-      let cmType = "variable";
-      if (jsType === "function") cmType = "function";
-      else if (jsType === "number" || jsType === "string") cmType = "constant";
-      else if (jsType === "object") cmType = "class";
+  const needle = normalize(typed);
+  for (const name of noteNames) {
+    if (needle && !normalize(name).startsWith(needle)) continue;
+    ranked.push({
+      rank: normalize(name) === needle ? 0 : 4,
+      label: name,
+      option: { label: name, type: "constant", detail: "MIDI note" },
+    });
+  }
 
-      return {
-        label: keyword,
-        type: cmType,
-        //detail: jsType, // Shows "function" or "object" next to the name
-        //info: source.sourceName, // Tooltip showing which file it came from
-      };
-    }),
-  );
+  ranked.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
 
   return {
     from: word ? word.from : context.pos,
-    options: options,
+    options: ranked.map((item) => item.option),
+    filter: false,
   };
 }
 
 // help system
-const functionSignatures = {
-  play: "play([what, howLoud, when, howLong, onSomething])",
-  create: "create([what, howLoud, when, howLong, onSomething])",
-  remove: "remove(index)",
-  insert: "insert(position, [what, howLoud, when, howLong, onSomething])",
-  repeat: "repeat(times, when)",
-  midiToName: "midiToName(number)",
-  midiToFrequency: "midiToFrequency(midi)",
-  frequencyToMidi: "frequencyToMidi(frequency)",
-  edo: "edo(number of divisions)",
-  justIntonation: "justIntonation(base pitch, number of harmonics)",
-  monotone: "monotone(initial tone, interval)",
-  transpose: "transpose([notes], interval)",
-  randomChord: "randomChord(size, range, microtonal = false)",
-  randomRhythm: "randomRhythm(size, range)",
-  blockChord:
-    "blockChord([what, howLoud, when, howLong, onSomething], [chord])",
-  arpeggio:
-    "arpeggio([what, howLoud, when, howLong, onSomething], [chord], repetitions, direction)",
-  intervalSequence:
-    "intervalSequence([what, howLoud, when, howLong, onSomething], interval, repetitions, direction)",
-  iterate:
-    "iterate([what, howLoud, when, howLong, onSomething], {what: [], howLoud: [], howLong: [], onSomething: []})",
-  invert: "invert([melody], axis)",
-  faster:
-    "faster([what, howLoud, when, howLong, onSomething], lastDuration, steps)",
-  slower:
-    "slower([what, howLoud, when, howLong, onSomething], lastDuration, steps)",
-  ostinato:
-    "ostinato([what, howLoud, when, howLong, onSomething], repetitions, [rhythm])",
-  euclidean:
-    "euclidean([what, howLoud, when, howLong, onSomething], repetitions, steps, hits, rotation)",
-  rotationSequence:
-    "rotationSequence([what, howLoud, when, howLong, onSomething], [rhythm])",
-  louder: "louder([what, howLoud, when, howLong, onSomething], lastAmp, steps)",
-  softer: "softer([what, howLoud, when, howLong, onSomething], lastAmp, steps)",
-  autoPan: "autoPan(hertz)",
-  glissando:
-    "glissando([what, howLoud, when, howLong, onSomething], targetPitch)",
-  retrograde: "retrograde([list])",
-  shuffle: "shuffle([list])",
-  rotate: "rotate([list], steps)",
-  blend: "blend([listA], [listB])",
-  stop: "stop([what, when])",
-  instrument: "instrument(instrumentName)",
-  sub: "sub(note1, note2, ...)",
-  rnd: "rnd(min, max)",
-  random: "random(min, max)",
-  randomInteger: "randomInteger(min, max)",
-  choose: "choose(option1, option2, ...)",
-  silently: "silently(ms)",
-  toque: "toque([oQuê, quãoForte, quando, quantoTempo, emAlgo])",
-  midiParaNome: "midiParaNome(midi)",
-  transpôr: "transpôr([notas], intervalo)",
-  afinaçãoJusta: "afinaçãoJusta(altura base, número de harmônicos)",
-  frequênciaParaMidi: "frequênciaParaMidi(frequência)",
-  monótono: "monótono(altura inicial, intervalo)",
-  acordeAleatório: "acordeAleatório(tamanho, registro, microtonal = false)",
-  arpejo:
-    "arpejo([oQuê, quãoForte, quando, quantoTempo, emAlgo], [acorde], repetições, direção)",
-  sequênciaIntervalar:
-    "sequênciaIntervalar([oQuê, quãoForte, quando, quantoTempo, emAlgo], intervalo, repetições, direção)",
-  iterar:
-    "iterar([oQuê, quãoForte, quando, quantoTempo, emAlgo], {oQuê: [], quãoForte: [], quantoTempo: [], emAlgo: []})",
-  inverter: "inverter([melodia], eixo)",
-  maisRápido:
-    "maisRápido([oQuê, quãoForte, quando, quantoTempo, emAlgo], passos, razão<1)",
-  maisLento:
-    "maisLento([oQuê, quãoForte, quando, quantoTempo, emAlgo], passos, razão>1)",
-  maisForte:
-    "maisForte([oQuê, quãoForte, quando, quantoTempo, emAlgo], última intensidade, passos)",
-  maisSuave:
-    "maisSuave([oQuê, quãoForte, quando, quantoTempo, emAlgo], última intensidade, passos)",
-  retrogradar: "retrogradar([lista])",
-  rotacionar: "rotacionar([lista])",
-  sequenciaRotacao:
-    "sequenciaRotacao([oQuê, quãoForte, quando, quantoTempo, emAlgo], [ritmo])",
-  euclideano:
-    "euclideano([oQuê, quãoForte, quando, quantoTempo, emAlgo], repetições, passos, ataques, rotação)",
-  misturar: "misturar([listaA], [listaB])",
-  embaralhar: "embaralhar([lista])",
-  panAutomático: "panAutomático(hertz)",
-  pare: "pare()",
-  instrumento: "instrumento(nomeDoInstrumento)",
-  escolha: "escolha(opção 1, opção 2, ...)",
-  quieto: "quieto(ms)",
-  distortion: "distortion(amount)",
-  highpass: "highpass(cutoff)",
-  tremolo: "tremolo(rate, depth)",
-  chorus: "chorus(rate, depth)",
-  reverb: "reverb(amount)",
-  cutoff: "cutoff(amount)",
-  resonance: "resonance(amount)",
-  delay: "delay(time, feedback)",
-  shift: "shift(frequency)",
-  pan: "pan(amount)",
-  volume: "volume(amount)",
-  ampEnvelope: "attack time, decay time, sustain level, release time",
-};
 
 const signatureTooltipField = StateField.define({
   create: getSignatureTooltip,
@@ -257,7 +201,7 @@ function getSignatureTooltip(state) {
   //const match = textUpToCursor.match(/([a-zA-Z0-9_]+)\s*\([^)]*$/);
   if (!match) return null;
   const funcName = match[1];
-  const signature = functionSignatures[funcName];
+  const signature = signaturesByName.get(funcName);
   if (!signature) return null;
   return {
     pos: pos,
