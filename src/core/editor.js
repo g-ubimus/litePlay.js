@@ -153,6 +153,7 @@ const functionSignatures = {
   monotone: "monotone(initial tone, interval)",
   transpose: "transpose([notes], interval)",
   randomChord: "randomChord(size, range, microtonal = false)",
+  randomRhythm: "randomRhythm(size, range)",
   blockChord:
     "blockChord([what, howLoud, when, howLong, onSomething], [chord])",
   arpeggio:
@@ -185,7 +186,8 @@ const functionSignatures = {
   instrument: "instrument(instrumentName)",
   sub: "sub(note1, note2, ...)",
   rnd: "rnd(min, max)",
-  rndInt: "rndInt(min, max)",
+  random: "random(min, max)",
+  randomInteger: "randomInteger(min, max)",
   choose: "choose(option1, option2, ...)",
   silently: "silently(ms)",
   toque: "toque([oQuê, quãoForte, quando, quantoTempo, emAlgo])",
