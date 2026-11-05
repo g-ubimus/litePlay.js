@@ -61,7 +61,7 @@ export const SNIPPET_CATEGORIES = [
       {
         id: "transpose",
         label: "Transpose a melody",
-        code: "let notes = [C4, D4, E4, F4, G4];\nlet transposedNotes = transpose(notes, 6);\nlet transposed = eventList.create();\nfor (let i = 0; i < transposedNotes.length; i++) {\ntransposed.add([transposedNotes[i], midLevel, i+when+1]);\n}\ntransposed.play();",
+        code: "let notes = [C4, D4, E4, F4, G4];\nlet transposedNotes = transpose(notes, 6);\nlet transposed = eventList.create();\nfor (let i = 0; i < transposedNotes.length; i++) {\ntransposed.add([transposedNotes[i], midLevel, i+1]);\n}\ntransposed.play();",
       },
       {
         id: "invert",
@@ -70,7 +70,12 @@ export const SNIPPET_CATEGORIES = [
       },
       {
         id: "microtonal",
-        label: "Microtonal scale",
+        label: "Microtonal intervals",
+        code: "play(C4+quarterTone) // equivalent to 60.5 \n//try these:\n//play(C4+thirdTone) // equivalent to 60.33\n//play(C4+eighthTone) // equivalent to 60.25\n//play(C4+tenCent) // equivalent to 60.1\n//play(C4+oneCent) // equivalent to 60.01;",
+      },
+      {
+        id: "edo",
+        label: "Equal Division of Octave scale (EDO)",
         code: "let scale = edo(19);\nlet transposedScale = transpose(scale, A4);\nlet list = eventList.create();\nfor (let i = 0; i < transposedScale.length; i++) {\nlist.add([transposedScale[i], loud, i*.2, .2, guitar]);\n}\nlist.play();",
       },
       {
@@ -79,45 +84,50 @@ export const SNIPPET_CATEGORIES = [
         code: "let inTune = justIntonation(C4, 13);\nlet list = eventList.create();\nfor (let i = 0; i < inTune.length; i++) {\nlist.add([inTune[i], loud, i*.3, .3, clarinet]);\n}\nlist.play();",
       },
       {
-        id: "glissando",
-        label: "Glissando",
-        code: "glissando(C4, G4).play();",
+        id: "monotone",
+        label: "Monotone",
+        code: "let e = [()=>monotone(C4), loud, 0, .1, clarinet];\nostinato(e, 100).play()",
       },
     ],
   },
   {
     id: "rhythm",
-    title: "Rhythm & Pattern",
+    title: "Rhythm & Patterns",
     items: [
       {
         id: "arpeggio",
         label: "Arpeggio",
-        code: 'arpeggio(C4, [C4, E4, G4, C5], 2, "forward").play();',
+        code: 'arpeggio({onSomething:mutedTrumpet}, [C4, E4, G4, C5], 2, "forward").play();',
       },
       {
         id: "euclidean",
-        label: "Euclidean rhythm",
+        label: "Euclidean rhythms",
         code: "euclidean({what: snare, howLong: .2, onSomething: drums}, 4, 8, 3).play();",
       },
       {
         id: "ostinato",
-        label: "Ostinato riff",
-        code: "ostinato(C4, 4, [0.5, 0.25, 0.25]).play();",
+        label: "Ostinato",
+        code: "let rhythm = [0.5, 0.165, 0.165, 0.165, 0.5, 0.165, 0.165, 0.165, 0.5, 0.165, 0.165, 0.165, 0.5, 0.5];\nostinato({what: snare, onSomething:drums}, 4, rhythm).play();",
+      },
+      {
+        id: "rndRhythm",
+        label: "Random rhythm",
+        code: "let rhythm = randomRhythm(8, shortDur);\nostinato([snare, .6, 0, .25, drums], 4, rhythm).play();",
       },
       {
         id: "interval-sequence",
         label: "Rising/falling steps",
-        code: 'intervalSequence(C4, 3, 4, "up").play();',
+        code: 'intervalSequence(C4, 3, 4, "up").play();\n//falling:\n//intervalSequence(C4, 3, 4, "down").play()',
       },
       {
         id: "rotation-sequence",
         label: "Rotating rhythm",
-        code: "rotationSequence(C4, [0.5, 0.25, 0.25]).play();",
+        code: "rotationSequence({onSomething: onDrums}, [0.5, 0.25, 0.25]).play();",
       },
       {
         id: "iterate",
         label: "Iterate through notes & durations",
-        code: "iterate(C4, { what: [C4, E4, G4], howLong: [0.5, 0.25, 0.25] }).play();",
+        code: "iterate(C4, {what: [C4, E4, G4], howLong: [0.5, 0.25, 0.25]}).play();",
       },
     ],
   },
@@ -126,9 +136,34 @@ export const SNIPPET_CATEGORIES = [
     title: "Effects",
     items: [
       {
+        id: "ampEnv",
+        label: "Amplitude Envelope",
+        code: "strings.reverb(1);\nstrings.ampEnvelope(.5,1,1,10);\nstrings.play([C2, 1, 0], [Bb2, .9, .5], [Ab3, .8, 1], [Gb4, .7, 1.5], [E5, .6, 2], [D6, .5, 2.5]); // Alien chord",
+      },
+      {
+        id: "bend",
+        label: "Bend",
+        code: "sequencer.clear();\nsequencer.clearCallbacks();\nsequencer.play();\nfunction time() {\n  piano.bend(rnd(-1,1))\n  piano.play([hiPitch,loud,choose(now,soon,later),longDur])\n  sequencer.addCallback(time)\n}\nsequencer.addCallback(time)",
+      },
+      {
+        id: "chorus",
+        label: "Chorus",
+        code: "strings.chorus(0.25, 0.02);\nstrings.play([C4, 1, 0, 4]);",
+      },
+      {
         id: "distortion",
         label: "Distortion",
         code: "guitar.distortion(0.7);\nguitar.play(E2);",
+      },
+      {
+        id: "delay",
+        label: "Echo/Delay",
+        code: "xylophone.delay(.1, .9)\nxylophone.play();",
+      },
+      {
+        id: "filterEnv",
+        label: "Filter Envelope",
+        code: "synth.filterEnvelope(.7, 1, 1, 1, 1);\nsynth.cutoff(.5);\nsynth.play([hiPitch,loud,0,1]);",
       },
       {
         id: "highpass",
@@ -136,14 +171,24 @@ export const SNIPPET_CATEGORIES = [
         code: "piano.highpass(0.4);\npiano.play(C4);",
       },
       {
+        id: "pan",
+        label: "Pan left/right",
+        code: "drums2.pan(0);\ndrums2.play([snare, 1, 0]);",
+      },
+      {
+        id: "shift",
+        label: "Frequency Shifter",
+        code: "piano.shift(100);\npiano.play();",
+      },
+      {
         id: "tremolo",
         label: "Tremolo",
         code: "organ.tremolo(6, 0.6);\norgan.play(G3);",
       },
       {
-        id: "chorus",
-        label: "Chorus",
-        code: "strings.chorus(0.25, 0.02);\nstrings.play([C4, 1, 0, 4]);",
+        id: "resonance",
+        label: "Filter resonance",
+        code: "synth.resonance(.95);\nsynth.cutoff(.8);\nsynth.play();",
       },
     ],
   },
@@ -167,19 +212,24 @@ export const SNIPPET_CATEGORIES = [
         code: "silently(500).then(() => play(G4));",
       },
       {
-        id: "pan",
-        label: "Pan left/right",
-        code: "piano.pan(0.2);\npiano.play(C4);",
+        id: "retrograde",
+        label: "List inversion",
+        code: "let myList = [1, 2, 3, 4];\nlet retro = retrograde(myList);\nconsole.log(retro) //returns [4,3,2,1]",
       },
       {
-        id: "delay",
-        label: "Echo / delay",
-        code: "guitar.delay(0.3, 0.4);\nguitar.play(E3);",
+        id: "rotation",
+        label: "List rotation",
+        code: "let melody = [1, 2, 3, 4];\nlet rotated = rotate(melody, 2);\nconsole.log(rotated) // returns [3,4,1,2]",
       },
       {
-        id: "autopan",
-        label: "Auto-pan",
-        code: "pad1.autoPan(0.5);\nplay([C3, 1, 0, 4]);",
+        id: "blend",
+        label: "Blend two lists",
+        code: "let listA = [1,2,3];\nlet listB = [4,5,6,7,8];\nconsole.log(blend(listA,listB)) // returns [1, 4, 2, 5, 3, 6, 1, 7, 2, 8]",
+      },
+      {
+        id: "shuffle",
+        label: "Shuffle a list",
+        code: "let melody = [1, 2, 3, 4];\nlet shuffled = shuffle(melody);\nconsole.log(shuffled)",
       },
     ],
   },
