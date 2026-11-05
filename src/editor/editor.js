@@ -237,14 +237,65 @@ const signatureTooltipField = StateField.define({
   provide: (f) => showTooltip.from(f),
 });
 
+function calleeName(state, call) {
+  const callee =
+    call.getChild("VariableName") ?? call.getChild("MemberExpression");
+  if (!callee) return null;
+
+  if (callee.name === "VariableName") {
+    return state.sliceDoc(callee.from, callee.to);
+  }
+
+  const property = callee.getChild("PropertyName");
+  if (property) return state.sliceDoc(property.from, property.to);
+
+  const quoted = callee.getChild("String");
+  if (quoted) return state.sliceDoc(quoted.from + 1, quoted.to - 1);
+
+  return null;
+}
+
+function signatureNameAt(state, pos) {
+  let argList = null;
+  let skippedClosed = false;
+
+  for (
+    let node = syntaxTree(state).resolveInner(pos, -1);
+    node;
+    node = node.parent
+  ) {
+    if (node.name === "ArgList") {
+      // A call whose closing paren is right before the cursor is done.
+      // Keep walking outward to the call that actually contains the cursor.
+      if (node.to === pos && node.lastChild?.name === ")") {
+        skippedClosed = true;
+        continue;
+      }
+      argList = node;
+      break;
+    }
+
+    if (
+      (node.name === "CallExpression" || node.name === "NewExpression") &&
+      !skippedClosed
+    ) {
+      // The cursor is in the callee name, not in its arguments.
+      return null;
+    }
+
+    if (node.type.isTop) break;
+  }
+
+  if (!argList) return null;
+  const call = argList.parent;
+  if (!call) return null;
+  return calleeName(state, call);
+}
+
 function getSignatureTooltip(state) {
   const pos = state.selection.main.head;
-  const line = state.doc.lineAt(pos);
-  const textUpToCursor = line.text.slice(0, pos - line.from);
-  const match = textUpToCursor.match(/([\p{L}0-9_]+)\s*\([^)]*$/u);
-  //const match = textUpToCursor.match(/([a-zA-Z0-9_]+)\s*\([^)]*$/);
-  if (!match) return null;
-  const funcName = match[1];
+  const funcName = signatureNameAt(state, pos);
+  if (!funcName) return null;
   const signature = signaturesByName.get(funcName);
   if (!signature) return null;
   return {
