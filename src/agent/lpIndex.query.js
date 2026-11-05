@@ -75,6 +75,22 @@ export function matches(item, prefix) {
   return namesOf(item).some((name) => normalize(name).startsWith(needle));
 }
 
+/**
+ * Rank a match: exact name, name prefix, English alias, Portuguese alias,
+ * then anything else. Used to keep the completion list predictable.
+ */
+export function rankFor(item, typed) {
+  const needle = normalize(typed);
+  const name = normalize(item.name);
+  if (name === needle) return 0;
+  if (name.startsWith(needle)) return 1;
+  if (item.alias.en.some((alias) => normalize(alias).startsWith(needle)))
+    return 2;
+  if (item.alias.pt.some((alias) => normalize(alias).startsWith(needle)))
+    return 3;
+  return 4;
+}
+
 /** Global entries whose name or alias starts with the typed prefix. */
 export function candidates(prefix = "") {
   const needle = normalize(prefix);

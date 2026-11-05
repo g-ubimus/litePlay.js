@@ -10,6 +10,7 @@ import { autocompletion } from "https://esm.sh/@codemirror/autocomplete";
 import {
   syntaxHighlighting,
   HighlightStyle,
+  syntaxTree,
 } from "https://esm.sh/@codemirror/language";
 import { tags } from "https://esm.sh/@lezer/highlight";
 import { StateField } from "https://esm.sh/@codemirror/state";
@@ -99,8 +100,14 @@ import {
   matches,
   normalize,
   pickLabel,
+  rankFor,
 } from "../agent/lpIndex.query.js";
-import { midiRecorder } from "../core/litePlay.js";
+import {
+  methodOptions,
+  readMemberContext,
+  receiverTypeOf,
+} from "../agent/member.js";
+import { Instrument, Sampler, midiRecorder } from "../core/litePlay.js";
 import * as extra from "../core/extra.js";
 
 // Concrete note names still come from the classic constants script; the index
@@ -127,22 +134,59 @@ function completionType(item) {
   return "variable";
 }
 
-function completionRank(item, typed) {
-  const needle = normalize(typed);
-  const name = normalize(item.name);
-  if (name === needle) return 0;
-  if (name.startsWith(needle)) return 1;
-  if (item.alias.en.some((alias) => normalize(alias).startsWith(needle))) return 2;
-  if (item.alias.pt.some((alias) => normalize(alias).startsWith(needle))) return 3;
-  return 4;
+function insideStringOrComment(state, pos) {
+  for (
+    let node = syntaxTree(state).resolveInner(pos, -1);
+    node;
+    node = node.parent
+  ) {
+    if (node.name === "Interpolation") return false;
+    if (
+      [
+        "String",
+        "TemplateString",
+        "LineComment",
+        "BlockComment",
+        "RegExp",
+      ].includes(node.name)
+    ) {
+      return true;
+    }
+    if (node.type.isTop) break;
+  }
+  return false;
+}
+
+function runtimeReceiverType(name) {
+  const value = window[name];
+  if (value instanceof Sampler) return "Sampler";
+  // Uploaded samples are `sample.create()` objects, not Sampler instances.
+  if (value?.instr instanceof Sampler) return "sample";
+  if (value instanceof Instrument) return "Instrument";
+  return null;
 }
 
 function litePlayCompletions(context) {
+  if (insideStringOrComment(context.state, context.pos)) return null;
+
+  const text = context.state.doc.toString();
+  const language = detectLanguage(text);
+
+  const member = readMemberContext(text, context.pos);
+  if (member) {
+    const receiver =
+      receiverTypeOf(member.receiverName) ??
+      runtimeReceiverType(member.receiverName);
+    if (!receiver) return null;
+    const options = methodOptions(receiver, member.prefix, language);
+    if (!options.length) return null;
+    return { from: member.from, options, filter: false };
+  }
+
   const word = context.matchBefore(/[\p{L}0-9_]+/u);
   if (!word && !context.explicit) return null;
 
   const typed = word ? word.text : "";
-  const language = detectLanguage(context.state.doc.toString());
   const ranked = [];
 
   for (const item of GLOBAL_ENTRIES) {
@@ -150,7 +194,7 @@ function litePlayCompletions(context) {
     if (!matches(item, typed)) continue;
     const label = pickLabel(item, typed, language);
     ranked.push({
-      rank: completionRank(item, typed),
+      rank: rankFor(item, typed),
       label,
       option: {
         label,
