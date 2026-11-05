@@ -64,6 +64,10 @@ console.error = function (...args) {
   }
 };
 
+function clearConsole() {
+  return (document.getElementById("console-output").value = "");
+}
+
 // run and stop litePlay (must be before startState)
 function runLP() {
   try {
@@ -371,6 +375,7 @@ const startState = EditorState.create({
         { key: "Mod-Enter", run: runLP },
         { key: "Mod-.", run: stopLP },
         { key: "Mod-s", run: saveCode },
+        { key: "Mod-k", run: clearConsole },
       ]),
     ),
   ],
