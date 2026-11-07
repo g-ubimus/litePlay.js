@@ -161,6 +161,14 @@ div.text {
   white-space: pre;
 }
 
+.cm-ghost-text {
+  opacity: 0.45;
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
+  white-space: pre;
+}
+
 .cm-editor {
 	width: 100%;
 	height: 500px;

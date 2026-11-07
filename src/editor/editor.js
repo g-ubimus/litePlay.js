@@ -1,20 +1,32 @@
 // code mirror
 import { basicSetup } from "https://esm.sh/codemirror@6.0.2";
-import { EditorView, keymap } from "https://esm.sh/@codemirror/view";
-import { EditorState, Prec } from "https://esm.sh/@codemirror/state";
+import {
+  Decoration,
+  EditorView,
+  WidgetType,
+  keymap,
+  showTooltip,
+} from "https://esm.sh/@codemirror/view";
+import {
+  EditorState,
+  Prec,
+  StateEffect,
+  StateField,
+} from "https://esm.sh/@codemirror/state";
 import {
   javascript,
   javascriptLanguage,
 } from "https://esm.sh/@codemirror/lang-javascript";
-import { autocompletion } from "https://esm.sh/@codemirror/autocomplete";
+import {
+  autocompletion,
+  completionStatus,
+} from "https://esm.sh/@codemirror/autocomplete";
 import {
   syntaxHighlighting,
   HighlightStyle,
   syntaxTree,
 } from "https://esm.sh/@codemirror/language";
 import { tags } from "https://esm.sh/@lezer/highlight";
-import { StateField } from "https://esm.sh/@codemirror/state";
-import { showTooltip } from "https://esm.sh/@codemirror/view";
 // extendable media recorder
 import {
   MediaRecorder,
@@ -107,6 +119,7 @@ import {
   readMemberContext,
   receiverTypeOf,
 } from "../agent/member.js";
+import { scaffoldArgs } from "../agent/ghost.js";
 import { Instrument, Sampler, midiRecorder } from "../core/litePlay.js";
 import * as extra from "../core/extra.js";
 
@@ -117,11 +130,13 @@ const noteNames = Object.keys(window.lpAutocomplete ?? {}).filter((name) =>
 );
 
 const signaturesByName = new Map();
+const entriesByName = new Map();
 for (const item of LP_INDEX) {
   if (!item.signature) continue;
   const names = [item.name, ...item.alias.en, ...item.alias.pt];
   for (const name of names) {
     if (!signaturesByName.has(name)) signaturesByName.set(name, item.signature);
+    if (!entriesByName.has(name)) entriesByName.set(name, item);
   }
 }
 
@@ -255,7 +270,7 @@ function calleeName(state, call) {
   return null;
 }
 
-function signatureNameAt(state, pos) {
+function callAt(state, pos) {
   let argList = null;
   let skippedClosed = false;
 
@@ -289,12 +304,122 @@ function signatureNameAt(state, pos) {
   if (!argList) return null;
   const call = argList.parent;
   if (!call) return null;
-  return calleeName(state, call);
+  const name = calleeName(state, call);
+  if (!name) return null;
+  return { name, argList, call };
+}
+
+/**
+ * How many arguments are already present at `pos`, or null when the cursor
+ * is not at the start of an argument.
+ */
+function argumentIndexAt(state, argList, pos) {
+  let argIndex = 0;
+  let previous = null;
+  let next = null;
+
+  for (let child = argList.firstChild; child; child = child.nextSibling) {
+    if (child.name === "," && child.from < pos) argIndex++;
+    if ((child.name === "(" || child.name === ",") && child.to <= pos) {
+      previous = child;
+    }
+    if ((child.name === "," || child.name === ")") && child.from >= pos) {
+      next = child;
+      break;
+    }
+  }
+
+  if (!previous) return null;
+  if (state.sliceDoc(previous.to, pos).trim()) return null;
+  const end = next ? next.from : Math.max(pos, argList.to);
+  if (state.sliceDoc(pos, end).trim()) return null;
+  return argIndex;
+}
+
+function ghostSuggestion(state) {
+  const { main } = state.selection;
+  if (main.from !== main.to) return null;
+  if (completionStatus(state)) return null;
+
+  const call = callAt(state, main.head);
+  if (!call) return null;
+  const entry = entriesByName.get(call.name);
+  if (!entry?.params?.length) return null;
+
+  const argIndex = argumentIndexAt(state, call.argList, main.head);
+  if (argIndex === null) return null;
+
+  const text = scaffoldArgs(entry.params, argIndex);
+  if (!text) return null;
+
+  const closed = call.argList.lastChild?.name === ")";
+  return { from: main.head, text: closed ? text : `${text})` };
+}
+
+class GhostWidget extends WidgetType {
+  constructor(text) {
+    super();
+    this.text = text;
+  }
+
+  eq(other) {
+    return other.text === this.text;
+  }
+
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-ghost-text";
+    span.textContent = this.text;
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+
+  ignoreEvent() {
+    return true;
+  }
+}
+
+const dismissGhostEffect = StateEffect.define();
+
+const ghostField = StateField.define({
+  create: () => null,
+  update(value, tr) {
+    if (tr.effects.some((effect) => effect.is(dismissGhostEffect))) return null;
+    return ghostSuggestion(tr.state);
+  },
+  provide: (field) =>
+    EditorView.decorations.from(field, (ghost) =>
+      ghost
+        ? Decoration.set([
+            Decoration.widget({
+              widget: new GhostWidget(ghost.text),
+              side: 1,
+            }).range(ghost.from),
+          ])
+        : Decoration.none,
+    ),
+});
+
+function acceptGhost(view) {
+  const ghost = view.state.field(ghostField, false);
+  if (!ghost || view.state.selection.main.head !== ghost.from) return false;
+  view.dispatch({
+    changes: { from: ghost.from, insert: ghost.text },
+    selection: { anchor: ghost.from + ghost.text.length },
+    userEvent: "input.complete",
+  });
+  return true;
+}
+
+function dismissGhost(view) {
+  if (!view.state.field(ghostField, false)) return false;
+  view.dispatch({ effects: dismissGhostEffect.of(null) });
+  return true;
 }
 
 function getSignatureTooltip(state) {
   const pos = state.selection.main.head;
-  const funcName = signatureNameAt(state, pos);
+  const funcName = callAt(state, pos)?.name;
   if (!funcName) return null;
   const signature = signaturesByName.get(funcName);
   if (!signature) return null;
@@ -411,8 +536,11 @@ const startState = EditorState.create({
     }),
     autocompletion(),
     signatureTooltipField,
+    ghostField,
     Prec.highest(
       keymap.of([
+        { key: "Tab", run: acceptGhost },
+        { key: "Escape", run: dismissGhost },
         { key: "Mod-Enter", run: runLP },
         { key: "Mod-.", run: stopLP },
         { key: "Mod-s", run: saveCode },
