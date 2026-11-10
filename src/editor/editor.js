@@ -105,7 +105,7 @@ const stopLP = async (event) => {
 };
 
 // import the static API index for completions and signatures
-import { LP_INDEX, NOTE_FAMILY } from "../agent/lpIndex.js";
+import { LP_INDEX, NOTE_FAMILY } from "./lpIndex.js";
 import {
   GLOBAL_ENTRIES,
   detectLanguage,
@@ -113,13 +113,9 @@ import {
   normalize,
   pickLabel,
   rankFor,
-} from "../agent/lpIndex.query.js";
-import {
-  methodOptions,
-  readMemberContext,
-  receiverTypeOf,
-} from "../agent/member.js";
-import { scaffoldArgs } from "../agent/ghost.js";
+} from "./lpIndex.query.js";
+import { methodOptions, readMemberContext, receiverTypeOf } from "./member.js";
+import { scaffoldArgs } from "./ghost.js";
 import { Instrument, Sampler, midiRecorder } from "../core/litePlay.js";
 import * as extra from "../core/extra.js";
 
