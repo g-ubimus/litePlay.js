@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { scaffoldArgs } from "../src/agent/ghost.js";
-import { methodsFor, resolveGlobal } from "../src/agent/lpIndex.query.js";
+import { scaffoldArgs } from "../src/editor/ghost.js";
+import { methodsFor, resolveGlobal } from "../src/editor/lpIndex.query.js";
 
 const paramsOf = (name) => resolveGlobal(name).params;
 const methodOf = (receiver, name) =>

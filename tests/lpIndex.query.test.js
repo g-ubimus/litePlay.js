@@ -13,7 +13,7 @@ import {
   pickLabel,
   resolveGlobal,
   resolveMethod,
-} from "../src/agent/lpIndex.query.js";
+} from "../src/editor/lpIndex.query.js";
 
 describe("normalize", () => {
   it("strips diacritics and lowercases", () => {
@@ -62,7 +62,9 @@ describe("matching", () => {
   });
 
   it("finds candidates by name and alias", () => {
-    expect(candidates("transp").map((item) => item.name)).toContain("transpose");
+    expect(candidates("transp").map((item) => item.name)).toContain(
+      "transpose",
+    );
     expect(candidates("viol").map((item) => item.name)).toContain("guitar");
   });
 

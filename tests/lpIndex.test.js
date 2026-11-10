@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, it, expect, beforeAll } from "vitest";
-import { LP_INDEX, NOTE_FAMILY } from "../src/agent/lpIndex.js";
-import { namesOf } from "../src/agent/lpIndex.query.js";
+import { LP_INDEX, NOTE_FAMILY } from "../src/editor/lpIndex.js";
+import { namesOf } from "../src/editor/lpIndex.query.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const constantsSource = readFileSync(

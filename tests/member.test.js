@@ -3,7 +3,7 @@ import {
   methodOptions,
   readMemberContext,
   receiverTypeOf,
-} from "../src/agent/member.js";
+} from "../src/editor/member.js";
 
 function at(text) {
   return readMemberContext(text, text.length);
