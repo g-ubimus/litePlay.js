@@ -1,19 +1,32 @@
 // code mirror
 import { basicSetup } from "https://esm.sh/codemirror@6.0.2";
-import { EditorView, keymap } from "https://esm.sh/@codemirror/view";
-import { EditorState, Prec } from "https://esm.sh/@codemirror/state";
+import {
+  Decoration,
+  EditorView,
+  WidgetType,
+  keymap,
+  showTooltip,
+} from "https://esm.sh/@codemirror/view";
+import {
+  EditorState,
+  Prec,
+  StateEffect,
+  StateField,
+} from "https://esm.sh/@codemirror/state";
 import {
   javascript,
   javascriptLanguage,
 } from "https://esm.sh/@codemirror/lang-javascript";
-import { autocompletion } from "https://esm.sh/@codemirror/autocomplete";
+import {
+  autocompletion,
+  completionStatus,
+} from "https://esm.sh/@codemirror/autocomplete";
 import {
   syntaxHighlighting,
   HighlightStyle,
+  syntaxTree,
 } from "https://esm.sh/@codemirror/language";
 import { tags } from "https://esm.sh/@lezer/highlight";
-import { StateField } from "https://esm.sh/@codemirror/state";
-import { showTooltip } from "https://esm.sh/@codemirror/view";
 // extendable media recorder
 import {
   MediaRecorder,
@@ -91,153 +104,139 @@ const stopLP = async (event) => {
   }
 };
 
-// import constants for autocompletion
-import * as litePlayLang from "../core/litePlay.js";
-import { midiRecorder } from "../core/litePlay.js";
+// import the static API index for completions and signatures
+import { LP_INDEX, NOTE_FAMILY } from "./lpIndex.js";
+import {
+  GLOBAL_ENTRIES,
+  detectLanguage,
+  matches,
+  normalize,
+  pickLabel,
+  rankFor,
+} from "./lpIndex.query.js";
+import { methodOptions, readMemberContext, receiverTypeOf } from "./member.js";
+import { scaffoldArgs } from "./ghost.js";
+import { Instrument, Sampler, midiRecorder } from "../core/litePlay.js";
 import * as extra from "../core/extra.js";
-const lpKeys = Object.keys(litePlayLang);
-const extraKeys = Object.keys(extra);
-const lpConstKeys = Object.keys(window.lpAutocomplete);
+
+// Concrete note names still come from the classic constants script; the index
+// only describes what they mean.
+const noteNames = Object.keys(window.lpAutocomplete ?? {}).filter((name) =>
+  NOTE_FAMILY.pattern.test(name),
+);
+
+const signaturesByName = new Map();
+const entriesByName = new Map();
+for (const item of LP_INDEX) {
+  if (!item.signature) continue;
+  const names = [item.name, ...item.alias.en, ...item.alias.pt];
+  for (const name of names) {
+    if (!signaturesByName.has(name)) signaturesByName.set(name, item.signature);
+    if (!entriesByName.has(name)) entriesByName.set(name, item);
+  }
+}
+
+function completionType(item) {
+  if (item.kind === "function") return "function";
+  if (item.kind === "class") return "class";
+  if (item.kind === "namespace") return "namespace";
+  if (item.kind === "constant" || item.kind === "family") return "constant";
+  if (item.kind === "instrument") return "variable";
+  return "variable";
+}
+
+function insideStringOrComment(state, pos) {
+  for (
+    let node = syntaxTree(state).resolveInner(pos, -1);
+    node;
+    node = node.parent
+  ) {
+    if (node.name === "Interpolation") return false;
+    if (
+      [
+        "String",
+        "TemplateString",
+        "LineComment",
+        "BlockComment",
+        "RegExp",
+      ].includes(node.name)
+    ) {
+      return true;
+    }
+    if (node.type.isTop) break;
+  }
+  return false;
+}
+
+function runtimeReceiverType(name) {
+  const value = window[name];
+  if (value instanceof Sampler) return "Sampler";
+  // Uploaded samples are `sample.create()` objects, not Sampler instances.
+  if (value?.instr instanceof Sampler) return "sample";
+  if (value instanceof Instrument) return "Instrument";
+  return null;
+}
 
 function litePlayCompletions(context) {
-  let word = context.matchBefore(/[a-zA-Z0-9_À-ÿ]+/);
+  if (insideStringOrComment(context.state, context.pos)) return null;
+
+  const text = context.state.doc.toString();
+  const language = detectLanguage(text);
+
+  const member = readMemberContext(text, context.pos);
+  if (member) {
+    const receiver =
+      receiverTypeOf(member.receiverName) ??
+      runtimeReceiverType(member.receiverName);
+    if (!receiver) return null;
+    const options = methodOptions(receiver, member.prefix, language);
+    if (!options.length) return null;
+    return { from: member.from, options, filter: false };
+  }
+
+  const word = context.matchBefore(/[\p{L}0-9_]+/u);
   if (!word && !context.explicit) return null;
 
-  // 1. Define the different sources of keywords
-  const sources = [
-    { keys: lpKeys, lib: litePlayLang, sourceName: "litePlay" },
-    { keys: extraKeys, lib: extra, sourceName: "extra" },
-    { keys: lpConstKeys, lib: window.lpAutocomplete, sourceName: "constants" },
-  ];
+  const typed = word ? word.text : "";
+  const ranked = [];
 
-  // 2. Flatten all keys into a single array of options
-  const options = sources.flatMap((source) =>
-    source.keys.map((keyword) => {
-      // Look up the actual value in the corresponding library namespace
-      const itemValue = source.lib[keyword];
-      const jsType = typeof itemValue;
+  for (const item of GLOBAL_ENTRIES) {
+    if (item.kind === "family") continue;
+    if (!matches(item, typed)) continue;
+    const label = pickLabel(item, typed, language);
+    ranked.push({
+      rank: rankFor(item, typed),
+      label,
+      option: {
+        label,
+        type: completionType(item),
+        detail: item.signature ?? item.category,
+        info: item.summary || undefined,
+        apply: label,
+      },
+    });
+  }
 
-      // Map JS types to CodeMirror autocomplete icons/types
-      let cmType = "variable";
-      if (jsType === "function") cmType = "function";
-      else if (jsType === "number" || jsType === "string") cmType = "constant";
-      else if (jsType === "object") cmType = "class";
+  const needle = normalize(typed);
+  for (const name of noteNames) {
+    if (needle && !normalize(name).startsWith(needle)) continue;
+    ranked.push({
+      rank: normalize(name) === needle ? 0 : 4,
+      label: name,
+      option: { label: name, type: "constant", detail: "MIDI note" },
+    });
+  }
 
-      return {
-        label: keyword,
-        type: cmType,
-        //detail: jsType, // Shows "function" or "object" next to the name
-        //info: source.sourceName, // Tooltip showing which file it came from
-      };
-    }),
-  );
+  ranked.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
 
   return {
     from: word ? word.from : context.pos,
-    options: options,
+    options: ranked.map((item) => item.option),
+    filter: false,
   };
 }
 
 // help system
-const functionSignatures = {
-  play: "play([what, howLoud, when, howLong, onSomething])",
-  create: "create([what, howLoud, when, howLong, onSomething])",
-  remove: "remove(index)",
-  insert: "insert(position, [what, howLoud, when, howLong, onSomething])",
-  repeat: "repeat(times, when)",
-  midiToName: "midiToName(number)",
-  midiToFrequency: "midiToFrequency(midi)",
-  frequencyToMidi: "frequencyToMidi(frequency)",
-  edo: "edo(number of divisions)",
-  justIntonation: "justIntonation(base pitch, number of harmonics)",
-  monotone: "monotone(initial tone, interval)",
-  transpose: "transpose([notes], interval)",
-  randomChord: "randomChord(size, range, microtonal = false)",
-  randomRhythm: "randomRhythm(size, range)",
-  blockChord:
-    "blockChord([what, howLoud, when, howLong, onSomething], [chord])",
-  arpeggio:
-    "arpeggio([what, howLoud, when, howLong, onSomething], [chord], repetitions, direction)",
-  intervalSequence:
-    "intervalSequence([what, howLoud, when, howLong, onSomething], interval, repetitions, direction)",
-  iterate:
-    "iterate([what, howLoud, when, howLong, onSomething], {what: [], howLoud: [], howLong: [], onSomething: []})",
-  invert: "invert([melody], axis)",
-  faster:
-    "faster([what, howLoud, when, howLong, onSomething], lastDuration, steps)",
-  slower:
-    "slower([what, howLoud, when, howLong, onSomething], lastDuration, steps)",
-  ostinato:
-    "ostinato([what, howLoud, when, howLong, onSomething], repetitions, [rhythm])",
-  euclidean:
-    "euclidean([what, howLoud, when, howLong, onSomething], repetitions, steps, hits, rotation)",
-  rotationSequence:
-    "rotationSequence([what, howLoud, when, howLong, onSomething], [rhythm])",
-  louder: "louder([what, howLoud, when, howLong, onSomething], lastAmp, steps)",
-  softer: "softer([what, howLoud, when, howLong, onSomething], lastAmp, steps)",
-  autoPan: "autoPan(hertz)",
-  glissando:
-    "glissando([what, howLoud, when, howLong, onSomething], targetPitch)",
-  retrograde: "retrograde([list])",
-  shuffle: "shuffle([list])",
-  rotate: "rotate([list], steps)",
-  blend: "blend([listA], [listB])",
-  stop: "stop([what, when])",
-  instrument: "instrument(instrumentName)",
-  sub: "sub(note1, note2, ...)",
-  rnd: "rnd(min, max)",
-  random: "random(min, max)",
-  randomInteger: "randomInteger(min, max)",
-  choose: "choose(option1, option2, ...)",
-  silently: "silently(ms)",
-  toque: "toque([oQuê, quãoForte, quando, quantoTempo, emAlgo])",
-  midiParaNome: "midiParaNome(midi)",
-  transpôr: "transpôr([notas], intervalo)",
-  afinaçãoJusta: "afinaçãoJusta(altura base, número de harmônicos)",
-  frequênciaParaMidi: "frequênciaParaMidi(frequência)",
-  monótono: "monótono(altura inicial, intervalo)",
-  acordeAleatório: "acordeAleatório(tamanho, registro, microtonal = false)",
-  arpejo:
-    "arpejo([oQuê, quãoForte, quando, quantoTempo, emAlgo], [acorde], repetições, direção)",
-  sequênciaIntervalar:
-    "sequênciaIntervalar([oQuê, quãoForte, quando, quantoTempo, emAlgo], intervalo, repetições, direção)",
-  iterar:
-    "iterar([oQuê, quãoForte, quando, quantoTempo, emAlgo], {oQuê: [], quãoForte: [], quantoTempo: [], emAlgo: []})",
-  inverter: "inverter([melodia], eixo)",
-  maisRápido:
-    "maisRápido([oQuê, quãoForte, quando, quantoTempo, emAlgo], passos, razão<1)",
-  maisLento:
-    "maisLento([oQuê, quãoForte, quando, quantoTempo, emAlgo], passos, razão>1)",
-  maisForte:
-    "maisForte([oQuê, quãoForte, quando, quantoTempo, emAlgo], última intensidade, passos)",
-  maisSuave:
-    "maisSuave([oQuê, quãoForte, quando, quantoTempo, emAlgo], última intensidade, passos)",
-  retrogradar: "retrogradar([lista])",
-  rotacionar: "rotacionar([lista])",
-  sequenciaRotacao:
-    "sequenciaRotacao([oQuê, quãoForte, quando, quantoTempo, emAlgo], [ritmo])",
-  euclideano:
-    "euclideano([oQuê, quãoForte, quando, quantoTempo, emAlgo], repetições, passos, ataques, rotação)",
-  misturar: "misturar([listaA], [listaB])",
-  embaralhar: "embaralhar([lista])",
-  panAutomático: "panAutomático(hertz)",
-  pare: "pare()",
-  instrumento: "instrumento(nomeDoInstrumento)",
-  escolha: "escolha(opção 1, opção 2, ...)",
-  quieto: "quieto(ms)",
-  distortion: "distortion(amount)",
-  highpass: "highpass(cutoff)",
-  tremolo: "tremolo(rate, depth)",
-  chorus: "chorus(rate, depth)",
-  reverb: "reverb(amount)",
-  cutoff: "cutoff(amount)",
-  resonance: "resonance(amount)",
-  delay: "delay(time, feedback)",
-  shift: "shift(frequency)",
-  pan: "pan(amount)",
-  volume: "volume(amount)",
-  ampEnvelope: "attack time, decay time, sustain level, release time",
-};
 
 const signatureTooltipField = StateField.define({
   create: getSignatureTooltip,
@@ -249,15 +248,176 @@ const signatureTooltipField = StateField.define({
   provide: (f) => showTooltip.from(f),
 });
 
+function calleeName(state, call) {
+  const callee =
+    call.getChild("VariableName") ?? call.getChild("MemberExpression");
+  if (!callee) return null;
+
+  if (callee.name === "VariableName") {
+    return state.sliceDoc(callee.from, callee.to);
+  }
+
+  const property = callee.getChild("PropertyName");
+  if (property) return state.sliceDoc(property.from, property.to);
+
+  const quoted = callee.getChild("String");
+  if (quoted) return state.sliceDoc(quoted.from + 1, quoted.to - 1);
+
+  return null;
+}
+
+function callAt(state, pos) {
+  let argList = null;
+  let skippedClosed = false;
+
+  for (
+    let node = syntaxTree(state).resolveInner(pos, -1);
+    node;
+    node = node.parent
+  ) {
+    if (node.name === "ArgList") {
+      // A call whose closing paren is right before the cursor is done.
+      // Keep walking outward to the call that actually contains the cursor.
+      if (node.to === pos && node.lastChild?.name === ")") {
+        skippedClosed = true;
+        continue;
+      }
+      argList = node;
+      break;
+    }
+
+    if (
+      (node.name === "CallExpression" || node.name === "NewExpression") &&
+      !skippedClosed
+    ) {
+      // The cursor is in the callee name, not in its arguments.
+      return null;
+    }
+
+    if (node.type.isTop) break;
+  }
+
+  if (!argList) return null;
+  const call = argList.parent;
+  if (!call) return null;
+  const name = calleeName(state, call);
+  if (!name) return null;
+  return { name, argList, call };
+}
+
+/**
+ * How many arguments are already present at `pos`, or null when the cursor
+ * is not at the start of an argument.
+ */
+function argumentIndexAt(state, argList, pos) {
+  let argIndex = 0;
+  let previous = null;
+  let next = null;
+
+  for (let child = argList.firstChild; child; child = child.nextSibling) {
+    if (child.name === "," && child.from < pos) argIndex++;
+    if ((child.name === "(" || child.name === ",") && child.to <= pos) {
+      previous = child;
+    }
+    if ((child.name === "," || child.name === ")") && child.from >= pos) {
+      next = child;
+      break;
+    }
+  }
+
+  if (!previous) return null;
+  if (state.sliceDoc(previous.to, pos).trim()) return null;
+  const end = next ? next.from : Math.max(pos, argList.to);
+  if (state.sliceDoc(pos, end).trim()) return null;
+  return argIndex;
+}
+
+function ghostSuggestion(state) {
+  const { main } = state.selection;
+  if (main.from !== main.to) return null;
+  if (completionStatus(state)) return null;
+
+  const call = callAt(state, main.head);
+  if (!call) return null;
+  const entry = entriesByName.get(call.name);
+  if (!entry?.params?.length) return null;
+
+  const argIndex = argumentIndexAt(state, call.argList, main.head);
+  if (argIndex === null) return null;
+
+  const text = scaffoldArgs(entry.params, argIndex);
+  if (!text) return null;
+
+  const closed = call.argList.lastChild?.name === ")";
+  return { from: main.head, text: closed ? text : `${text})` };
+}
+
+class GhostWidget extends WidgetType {
+  constructor(text) {
+    super();
+    this.text = text;
+  }
+
+  eq(other) {
+    return other.text === this.text;
+  }
+
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-ghost-text";
+    span.textContent = this.text;
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+
+  ignoreEvent() {
+    return true;
+  }
+}
+
+const dismissGhostEffect = StateEffect.define();
+
+const ghostField = StateField.define({
+  create: () => null,
+  update(value, tr) {
+    if (tr.effects.some((effect) => effect.is(dismissGhostEffect))) return null;
+    return ghostSuggestion(tr.state);
+  },
+  provide: (field) =>
+    EditorView.decorations.from(field, (ghost) =>
+      ghost
+        ? Decoration.set([
+            Decoration.widget({
+              widget: new GhostWidget(ghost.text),
+              side: 1,
+            }).range(ghost.from),
+          ])
+        : Decoration.none,
+    ),
+});
+
+function acceptGhost(view) {
+  const ghost = view.state.field(ghostField, false);
+  if (!ghost || view.state.selection.main.head !== ghost.from) return false;
+  view.dispatch({
+    changes: { from: ghost.from, insert: ghost.text },
+    selection: { anchor: ghost.from + ghost.text.length },
+    userEvent: "input.complete",
+  });
+  return true;
+}
+
+function dismissGhost(view) {
+  if (!view.state.field(ghostField, false)) return false;
+  view.dispatch({ effects: dismissGhostEffect.of(null) });
+  return true;
+}
+
 function getSignatureTooltip(state) {
   const pos = state.selection.main.head;
-  const line = state.doc.lineAt(pos);
-  const textUpToCursor = line.text.slice(0, pos - line.from);
-  const match = textUpToCursor.match(/([\p{L}0-9_]+)\s*\([^)]*$/u);
-  //const match = textUpToCursor.match(/([a-zA-Z0-9_]+)\s*\([^)]*$/);
-  if (!match) return null;
-  const funcName = match[1];
-  const signature = functionSignatures[funcName];
+  const funcName = callAt(state, pos)?.name;
+  if (!funcName) return null;
+  const signature = signaturesByName.get(funcName);
   if (!signature) return null;
   return {
     pos: pos,
@@ -372,8 +532,11 @@ const startState = EditorState.create({
     }),
     autocompletion(),
     signatureTooltipField,
+    ghostField,
     Prec.highest(
       keymap.of([
+        { key: "Tab", run: acceptGhost },
+        { key: "Escape", run: dismissGhost },
         { key: "Mod-Enter", run: runLP },
         { key: "Mod-.", run: stopLP },
         { key: "Mod-s", run: saveCode },
