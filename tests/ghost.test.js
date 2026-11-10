@@ -8,12 +8,59 @@ const methodOf = (receiver, name) =>
 
 describe("scaffoldArgs", () => {
   it("fills the optional arguments after the supplied ones", () => {
-    expect(scaffoldArgs(paramsOf("arpeggio"), 2)).toBe('1, "forward"');
+    expect(scaffoldArgs(paramsOf("arpeggio"), 2)).toBe('1, "backAndForth"');
   });
 
   it("stops at a required argument", () => {
     expect(scaffoldArgs(paramsOf("arpeggio"), 1)).toBe(null);
-    expect(scaffoldArgs(paramsOf("euclidean"), 1)).toBe(null);
+    expect(scaffoldArgs(paramsOf("blockChord"), 1)).toBe(null);
+  });
+
+  it("fills defaults before an optional tail", () => {
+    expect(scaffoldArgs(paramsOf("ostinato"), 1)).toBe("1");
+    expect(scaffoldArgs(paramsOf("euclidean"), 1)).toBe("1");
+  });
+
+  it("does not skip an optional argument to reach later ones", () => {
+    expect(scaffoldArgs(paramsOf("ostinato"), 2)).toBe(null);
+    expect(scaffoldArgs(paramsOf("rotationSequence"), 1)).toBe(null);
+  });
+
+  it("formats event defaults as source", () => {
+    expect(scaffoldArgs(paramsOf("ostinato"), 0)).toBe("any, 1");
+    expect(scaffoldArgs(paramsOf("rotationSequence"), 0)).toBe("any");
+  });
+
+  it("only stops early when every remaining parameter can be omitted", () => {
+    expect(
+      scaffoldArgs([
+        { name: "a", type: "number", default: 1 },
+        { name: "b", type: "number", optional: true },
+      ]),
+    ).toBe("1");
+    expect(
+      scaffoldArgs([
+        { name: "a", type: "number", default: 1 },
+        { name: "b", type: "number", optional: true },
+        { name: "c", type: "number", default: 2 },
+      ]),
+    ).toBe("1");
+    expect(
+      scaffoldArgs([
+        { name: "a", type: "number", default: 1 },
+        { name: "b", type: "number", optional: true },
+        { name: "c", type: "number" },
+      ]),
+    ).toBe(null);
+  });
+
+  it("keeps quiet when the filled defaults carry no information", () => {
+    expect(
+      scaffoldArgs([
+        { name: "a", type: "number", default: 0 },
+        { name: "b", type: "number", optional: true },
+      ]),
+    ).toBe(null);
   });
 
   it("fills a single ranged parameter with its midpoint", () => {
@@ -40,8 +87,15 @@ describe("scaffoldArgs", () => {
     expect(scaffoldArgs(paramsOf("midiProgram"), 1)).toBe("1");
   });
 
+  it("uses the corrected interval sequence defaults", () => {
+    expect(scaffoldArgs(paramsOf("intervalSequence"), 2)).toBe("5");
+    expect(scaffoldArgs(paramsOf("intervalSequence"), 3)).toBe(null);
+  });
+
   it("refuses sentinel defaults that are not valid source", () => {
-    expect(scaffoldArgs(methodOf("Instrument", "event").params, 1)).toBe(null);
+    expect(
+      scaffoldArgs([{ name: "amount", type: "number", default: "instrument" }]),
+    ).toBe(null);
   });
 
   it("formats synthetic defaults", () => {

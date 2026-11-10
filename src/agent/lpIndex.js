@@ -472,7 +472,8 @@ const EXTRA = [
   entry({
     name: "arpeggio",
     category: "harmony",
-    signature: 'arpeggio(event, chord, repetitions = 1, direction = "forward")',
+    signature:
+      'arpeggio(event, chord, repetitions = 1, direction = "backAndForth")',
     params: [
       { name: "event", type: "event" },
       { name: "chord", type: "number[]" },
@@ -481,7 +482,7 @@ const EXTRA = [
         name: "direction",
         type: "string",
         options: ["forward", "backward", "backAndForth"],
-        default: "forward",
+        default: "backAndForth",
       },
     ],
     returns: "eventList",
@@ -506,13 +507,17 @@ const EXTRA = [
   entry({
     name: "intervalSequence",
     category: "harmony",
-    signature:
-      'intervalSequence(event, interval, repetitions = 1, direction = "forward")',
+    signature: "intervalSequence(event, interval, repetitions = 5, direction?)",
     params: [
       { name: "event", type: "event" },
       { name: "interval", type: "number" },
-      { name: "repetitions", type: "number", default: 1 },
-      { name: "direction", type: "string", default: "forward" },
+      { name: "repetitions", type: "number", default: 5 },
+      {
+        name: "direction",
+        type: "string",
+        options: ["up", "down"],
+        optional: true,
+      },
     ],
     returns: "eventList",
     summary: "Sequence built by repeating an interval.",
@@ -591,11 +596,11 @@ const EXTRA = [
   entry({
     name: "ostinato",
     category: "rhythm",
-    signature: "ostinato(event, repetitions = 1, rhythm)",
+    signature: "ostinato(event = any, repetitions = 1, rhythm?)",
     params: [
-      { name: "event", type: "event" },
+      { name: "event", type: "event", default: "any" },
       { name: "repetitions", type: "number", default: 1 },
-      { name: "rhythm", type: "number[]" },
+      { name: "rhythm", type: "number[]", optional: true },
     ],
     returns: "eventList",
     summary: "Repeat an event following a rhythm.",
@@ -616,12 +621,12 @@ const EXTRA = [
   entry({
     name: "euclidean",
     category: "rhythm",
-    signature: "euclidean(event, repetitions = 1, steps, hits, rotation = 0)",
+    signature: "euclidean(event, repetitions = 1, steps?, hits?, rotation = 0)",
     params: [
       { name: "event", type: "event" },
       { name: "repetitions", type: "number", default: 1 },
-      { name: "steps", type: "number" },
-      { name: "hits", type: "number" },
+      { name: "steps", type: "number", optional: true },
+      { name: "hits", type: "number", optional: true },
       { name: "rotation", type: "number", default: 0 },
     ],
     returns: "eventList",
@@ -632,10 +637,10 @@ const EXTRA = [
   entry({
     name: "rotationSequence",
     category: "rhythm",
-    signature: "rotationSequence(event, rhythm)",
+    signature: "rotationSequence(event = any, rhythm?)",
     params: [
-      { name: "event", type: "event" },
-      { name: "rhythm", type: "number[]" },
+      { name: "event", type: "event", default: "any" },
+      { name: "rhythm", type: "number[]", optional: true },
     ],
     returns: "eventList",
     summary: "Every rotation of a rhythm, in sequence.",

@@ -21,9 +21,17 @@ const INTERNAL_EXPORTS = [
 ];
 
 const INTERNAL = {
-  Instrument: [],
+  Instrument: ["what", "score", "event"],
   Sampler: [],
-  sequencer: ["clickOn", "seqList", "idcnt", "time", "callbacks", "click", "sequence"],
+  sequencer: [
+    "clickOn",
+    "seqList",
+    "idcnt",
+    "time",
+    "callbacks",
+    "click",
+    "sequence",
+  ],
   eventList: ["events", "maxdur"],
   sample: ["number", "fo", "bpm", "instr"],
   midiRecorder: [
@@ -49,7 +57,9 @@ beforeAll(async () => {
   globalThis.oneCent = 0.01;
   globalThis.rnd = (min, max) => Math.random() * (max - min) + min;
   globalThis.rndInt = (min, max) =>
-    Math.floor(Math.random() * (Math.floor(max) - Math.ceil(min)) + Math.ceil(min));
+    Math.floor(
+      Math.random() * (Math.floor(max) - Math.ceil(min)) + Math.ceil(min),
+    );
   globalThis.choose = (...options) => {
     if (options.length === 1 && Array.isArray(options[0])) options = options[0];
     return options[Math.floor(Math.random() * options.length)];
@@ -70,7 +80,9 @@ beforeAll(async () => {
 });
 
 function autocompleteNames() {
-  const block = constantsSource.match(/window\.lpAutocomplete\s*=\s*\{([\s\S]*?)\n\};/);
+  const block = constantsSource.match(
+    /window\.lpAutocomplete\s*=\s*\{([\s\S]*?)\n\};/,
+  );
   if (!block) throw new Error("window.lpAutocomplete block not found");
   return [...block[1].matchAll(/(?:^|\n)\s*([\p{L}\p{N}_]+)\s*,/gu)].map(
     (match) => match[1],
@@ -159,9 +171,10 @@ describe("LP_INDEX shape", () => {
     ]);
     for (const item of LP_INDEX) {
       if (item.kind !== "method") continue;
-      expect(receivers.has(item.receiver), `${item.name} -> ${item.receiver}`).toBe(
-        true,
-      );
+      expect(
+        receivers.has(item.receiver),
+        `${item.name} -> ${item.receiver}`,
+      ).toBe(true);
     }
   });
 });

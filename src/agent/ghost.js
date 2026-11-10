@@ -10,6 +10,7 @@ function formatDefault(param) {
   if (typeof value === "string") {
     if (param.type === "function") return value;
     if (param.type === "string") return JSON.stringify(value);
+    if (param.type === "event") return value;
     return null;
   }
   if (typeof value === "number" || typeof value === "boolean") {
@@ -30,37 +31,55 @@ function isEmptyDefault(value) {
   );
 }
 
+function isRange(param) {
+  return (
+    Array.isArray(param.range) &&
+    param.range.length === 2 &&
+    param.range.every((value) => Number.isFinite(value))
+  );
+}
+
+function canOmit(param) {
+  return param.optional === true || param.default !== undefined;
+}
+
 /**
  * Build the ghost text for the arguments that follow `startIndex`.
  *
- * Fills only when every remaining parameter has a default and at least one
- * of those defaults carries information (so transpose() stays quiet), or
- * when a single remaining parameter has a range (reverb() -> 0.5).
+ * Fills the leading parameters that have defaults. It stops early when every
+ * remaining parameter can be omitted, so accepting the suggestion always
+ * produces a valid call. A single remaining parameter with a range is filled
+ * with the midpoint (reverb() -> 0.5).
  */
 export function scaffoldArgs(params, startIndex = 0) {
   if (!Array.isArray(params)) return null;
   const remaining = params.slice(startIndex);
   if (!remaining.length) return null;
 
-  if (remaining.every((param) => param.default !== undefined)) {
-    if (remaining.every((param) => isEmptyDefault(param.default))) return null;
-    const parts = remaining.map(formatDefault);
-    if (parts.some((part) => part === null)) return null;
-    return parts.join(", ");
-  }
-
   if (remaining.length === 1) {
     const [param] = remaining;
-    if (
-      param.default === undefined &&
-      Array.isArray(param.range) &&
-      param.range.length === 2 &&
-      param.range.every((value) => Number.isFinite(value))
-    ) {
+    if (param.default === undefined && isRange(param)) {
       const [min, max] = param.range;
       return String(Math.round(((min + max) / 2) * 100) / 100);
     }
   }
 
-  return null;
+  const parts = [];
+  const values = [];
+
+  for (let index = 0; index < remaining.length; index++) {
+    const param = remaining[index];
+    const text = formatDefault(param);
+    if (text !== null) {
+      parts.push(text);
+      values.push(param.default);
+      continue;
+    }
+
+    if (!remaining.slice(index).every(canOmit)) return null;
+    break;
+  }
+
+  if (!parts.length || values.every(isEmptyDefault)) return null;
+  return parts.join(", ");
 }

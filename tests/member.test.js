@@ -94,7 +94,7 @@ describe("receiverTypeOf", () => {
 describe("methodOptions", () => {
   it("lists every Instrument method for an empty prefix", () => {
     const options = methodOptions("Instrument");
-    expect(options).toHaveLength(20);
+    expect(options).toHaveLength(17);
     expect(options.map((option) => option.label)).toContain("reverb");
     expect(options.map((option) => option.label)).not.toContain("toque");
     expect(
