@@ -400,7 +400,8 @@ const EXTRA = [
     signature: "edo(divisions)",
     params: [{ name: "divisions", type: "number" }],
     returns: "number[]",
-    summary: "Equal divisions of the octave, from 0 to 12 semitones.",
+    summary:
+      "Create a scale based on equal divisions of the octave in an arbitrary number of tones. Should be transposed to the desired range.",
     example: "edo(19);",
   }),
   entry({
