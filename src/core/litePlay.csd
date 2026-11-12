@@ -239,9 +239,7 @@ instr 10
 		gadel[p7] = gadel[p7] + a1
 		gadel[p7] = gadel[p7] + a2
 	endif
-	//send to chorus / comb-filter (each gated on its own
-	//active-flag table so a channel that never enables an effect never
-	//accumulates into that effect's bus)
+	//send to chorus 	
 	kchon table p7, 60
 	if kchon > 0 then
 		gachorus[p7] = gachorus[p7] + a1

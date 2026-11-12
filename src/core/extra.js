@@ -191,8 +191,9 @@ export function blockChord(eventInput, arg2) {
 
 export function arpeggio(eventInput, arg2, arg3, arg4) {
   let noteList = randomChord();
-  let repetitions = 1;
-  let direction = "backAndForth";
+  let repetitions = 0;
+  let iterations = 1;
+  let direction = choose("backAndForth", "forward", "backward");
   let l = eventList.create();
 
   if (typeof arg2 === "object" && arg2 !== null && !Array.isArray(arg2)) {
@@ -204,11 +205,6 @@ export function arpeggio(eventInput, arg2, arg3, arg4) {
     if (arg3 !== undefined) repetitions = arg3;
     if (arg4 !== undefined) direction = arg4;
   }
-  if (repetitions < 1) {
-    throw new RangeError(
-      `arpeggio(): repetitions (${repetitions}) must be at least 1.`,
-    );
-  }
 
   const [what, howLoud, when, howLong, onSomething] = resolveEvent(eventInput);
   const resolvedWhen = typeof when === "function" ? when() : when;
@@ -216,15 +212,11 @@ export function arpeggio(eventInput, arg2, arg3, arg4) {
   let currentTime = resolvedWhen;
   let notesToPlay = [];
 
-  if (direction === "forward" || direction === "normal") {
+  if (direction === "forward" || direction === "vai") {
     notesToPlay = [...noteList];
-  } else if (direction === "backward" || direction === "inversa") {
+  } else if (direction === "backward" || direction === "volta") {
     notesToPlay = [...noteList].reverse();
-  } else if (
-    direction === "backAndForth" ||
-    direction === "bidirectional" ||
-    direction === "vaiVolta"
-  ) {
+  } else if (direction === "backAndForth" || direction === "vaiVolta") {
     const downNotes = [...noteList].reverse().slice(1, -1);
     notesToPlay = [...noteList, ...downNotes];
   } else {
@@ -233,7 +225,16 @@ export function arpeggio(eventInput, arg2, arg3, arg4) {
     );
   }
 
-  for (let i = 0; i < repetitions; i++) {
+  if (repetitions < 0) {
+    repetitions = 0;
+    console.log(`Warning: arpeggio() repetitions must be positive!`);
+  }
+
+  if (repetitions != 0) {
+    iterations = iterations + repetitions;
+  }
+
+  for (let i = 0; i < iterations; i++) {
     for (let note of notesToPlay) {
       l.add([note, howLoud, currentTime, resolvedHowLong, onSomething]);
       currentTime += resolvedHowLong;
@@ -534,7 +535,7 @@ export function rotate(list, steps = 1) {
 }
 
 export function ostinato(eventInput, arg2, arg3) {
-  let repetitions = 1;
+  let repetitions = 3;
   let rhythm;
   const [what, howLoud, when, howLong, onSomething] = resolveEvent(eventInput);
   const resolvedWhen = typeof when === "function" ? when() : when;
@@ -560,7 +561,7 @@ export function ostinato(eventInput, arg2, arg3) {
   ]);
   let initialTime = resolvedWhen;
 
-  for (let i = 0, len = repetitions; i < len; i++) {
+  for (let i = 0; i < repetitions; i++) {
     for (let j of durations) {
       initialTime += j;
       const currentPitch = resolvePitch(what);
