@@ -474,11 +474,11 @@ const EXTRA = [
     name: "arpeggio",
     category: "harmony",
     signature:
-      'arpeggio(event, chord, repetitions = 1, direction = "backAndForth")',
+      'arpeggio(event, chord, repetitions = 0, direction = "backAndForth")',
     params: [
       { name: "event", type: "event" },
       { name: "chord", type: "number[]" },
-      { name: "repetitions", type: "number", default: 1 },
+      { name: "repetitions", type: "number", default: 0 },
       {
         name: "direction",
         type: "string",
@@ -597,10 +597,10 @@ const EXTRA = [
   entry({
     name: "ostinato",
     category: "rhythm",
-    signature: "ostinato(event = any, repetitions = 1, rhythm?)",
+    signature: "ostinato(event = any, repetitions = 3, rhythm?)",
     params: [
       { name: "event", type: "event", default: "any" },
-      { name: "repetitions", type: "number", default: 1 },
+      { name: "repetitions", type: "number", default: 3 },
       { name: "rhythm", type: "number[]", optional: true },
     ],
     returns: "eventList",
